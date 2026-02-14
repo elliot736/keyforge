@@ -1,0 +1,47 @@
+# ── Stage 1: Base ──────────────────────────────────────────────
+FROM node:20-alpine AS base
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+RUN apk add --no-cache libc6-compat
+
+# ── Stage 2: Prune ─────────────────────────────────────────────
+FROM base AS pruner
+WORKDIR /app
+COPY . .
+RUN pnpm dlx turbo prune api --docker
+
+# ── Stage 3: Install & Build ──────────────────────────────────
+FROM base AS builder
+WORKDIR /app
+
+# Install dependencies first (better caching)
+COPY --from=pruner /app/out/json/ .
+COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=pruner /app/out/pnpm-workspace.yaml ./pnpm-workspace.yaml
+RUN pnpm install --frozen-lockfile
+
+# Copy source and build
+COPY --from=pruner /app/out/full/ .
+COPY turbo.json turbo.json
+COPY tsconfig.base.json tsconfig.base.json
+RUN pnpm turbo build --filter=api...
+
+# ── Stage 4: Production Runner ────────────────────────────────
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 appuser
+
+ENV NODE_ENV=production
+
+# Copy built application and production dependencies
+COPY --from=builder --chown=appuser:nodejs /app/apps/api/dist ./dist
+COPY --from=builder --chown=appuser:nodejs /app/apps/api/package.json ./package.json
+COPY --from=builder --chown=appuser:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=appuser:nodejs /app/apps/api/node_modules ./app_node_modules
+
+USER appuser
+
+EXPOSE 4000
+
+CMD ["node", "dist/index.js"]

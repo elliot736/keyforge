@@ -1,0 +1,62 @@
+{
+  "name": "@keyforge/sdk",
+  "version": "0.1.0",
+  "description": "KeyForge SDK - API key management client and middleware",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./express": {
+      "import": "./dist/middleware/express.mjs",
+      "require": "./dist/middleware/express.js",
+      "types": "./dist/middleware/express.d.ts"
+    },
+    "./hono": {
+      "import": "./dist/middleware/hono.mjs",
+      "require": "./dist/middleware/hono.js",
+      "types": "./dist/middleware/hono.d.ts"
+    },
+    "./nextjs": {
+      "import": "./dist/middleware/nextjs.mjs",
+      "require": "./dist/middleware/nextjs.js",
+      "types": "./dist/middleware/nextjs.d.ts"
+    },
+    "./fastify": {
+      "import": "./dist/middleware/fastify.mjs",
+      "require": "./dist/middleware/fastify.js",
+      "types": "./dist/middleware/fastify.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@keyforge/shared": "workspace:*"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0",
+    "hono": ">=3.0.0",
+    "next": ">=13.0.0",
+    "fastify": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": { "optional": true },
+    "hono": { "optional": true },
+    "next": { "optional": true },
+    "fastify": { "optional": true }
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "@types/express": "^4.17.0",
+    "@types/node": "^20.0.0"
+  }
+}
