@@ -56,7 +56,11 @@ export class SessionGuard implements CanActivate {
       if (eqIdx === -1) continue;
       const key = pair.substring(0, eqIdx).trim();
       const value = pair.substring(eqIdx + 1).trim();
-      cookies[key] = decodeURIComponent(value);
+      try {
+        cookies[key] = decodeURIComponent(value);
+      } catch {
+        // Skip malformed cookie values (URIError)
+      }
     }
     return cookies;
   }

@@ -68,6 +68,7 @@ export class AuthService {
       .update(schema.rootKeys)
       .set({ lastUsedAt: new Date() })
       .where(eq(schema.rootKeys.id, rootKey.id))
+      .execute()
       .catch((err) =>
         this.logger.warn(`Failed to update root key lastUsedAt: ${err.message}`),
       );

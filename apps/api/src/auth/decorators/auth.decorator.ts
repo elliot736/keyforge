@@ -1,7 +1,7 @@
 import { applyDecorators, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { RootKeyGuard } from '../guards/root-key.guard';
-import { SessionGuard } from '../guards/session.guard';
+import { DashboardProxyGuard } from '../guards/dashboard-proxy.guard';
 import { WorkspaceRoleGuard } from '../guards/workspace-role.guard';
 
 /**
@@ -14,21 +14,19 @@ export function ApiAuth() {
 
 /**
  * Decorator for dashboard routes that require session authentication.
- * Validates the session cookie or Authorization header via better-auth.
+ * The Next.js proxy verifies the session and forwards user info via headers.
  */
 export function DashboardAuth() {
-  return applyDecorators(UseGuards(SessionGuard), ApiBearerAuth());
+  return applyDecorators(UseGuards(DashboardProxyGuard));
 }
 
 /**
  * Decorator for dashboard routes that require session auth + workspace role check.
- * Applies SessionGuard first, then WorkspaceRoleGuard.
  * Use with @RequireRole('admin') to set the minimum required role.
  */
 export function DashboardAuthWithRole() {
   return applyDecorators(
-    UseGuards(SessionGuard, WorkspaceRoleGuard),
-    ApiBearerAuth(),
+    UseGuards(DashboardProxyGuard, WorkspaceRoleGuard),
   );
 }
 
