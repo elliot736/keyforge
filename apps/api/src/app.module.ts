@@ -19,7 +19,13 @@ import { envSchema } from './config/env.schema';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      validate: (config) => envSchema.parse(config),
+      validate: (config) => {
+        const result = envSchema.safeParse(config);
+        if (!result.success) {
+          throw new Error(`Config validation error: ${result.error.message}`);
+        }
+        return result.data;
+      },
     }),
     ScheduleModule.forRoot(),
     DatabaseModule,

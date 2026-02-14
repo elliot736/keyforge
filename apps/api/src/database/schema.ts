@@ -83,10 +83,14 @@ export const apiKeys = pgTable(
     permissions: jsonb('permissions').$type<Record<string, unknown>>(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>(),
 
-    // Rate limiting
+    // Rate limiting (request-based)
     rateLimitMax: integer('rate_limit_max'),
     rateLimitWindow: integer('rate_limit_window'), // seconds
     rateLimitRefill: integer('rate_limit_refill'),
+
+    // Token/spend budgets (for LLM/AI APIs)
+    tokenBudget: bigint('token_budget', { mode: 'number' }),
+    spendCapCents: integer('spend_cap_cents'),
 
     // Expiration & usage limits
     expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -126,11 +130,17 @@ export const usageRecords = pgTable(
     id: text('id').primaryKey(), // usage_xxx
     keyId: text('key_id').notNull().references(() => apiKeys.id, { onDelete: 'cascade' }),
     workspaceId: text('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
-    period: text('period').notNull(), // e.g., '2026-03' for monthly, '2026-03-20' for daily
+    period: text('period').notNull(), // e.g., '2026-03-20T14:00' for hourly buckets
     verifications: bigint('verifications', { mode: 'number' }).notNull().default(0),
     successes: bigint('successes', { mode: 'number' }).notNull().default(0),
     rateLimited: bigint('rate_limited', { mode: 'number' }).notNull().default(0),
     usageExceeded: bigint('usage_exceeded', { mode: 'number' }).notNull().default(0),
+
+    // Token metering (for LLM/AI APIs)
+    tokensInput: bigint('tokens_input', { mode: 'number' }).notNull().default(0),
+    tokensOutput: bigint('tokens_output', { mode: 'number' }).notNull().default(0),
+    costCents: integer('cost_cents').notNull().default(0),
+    model: text('model'),
     ...timestamps,
   },
   (table) => [

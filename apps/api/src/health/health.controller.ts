@@ -1,5 +1,6 @@
-import { Controller, Get, Inject } from '@nestjs/common';
+import { Controller, Get, Inject, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { FastifyReply } from 'fastify';
 import { DRIZZLE } from '../database/database.module';
 import { RedisService } from '../redis/redis.service';
 import { sql } from 'drizzle-orm';
@@ -18,7 +19,7 @@ export class HealthController {
   @ApiOperation({ summary: 'Health check' })
   @ApiResponse({ status: 200, description: 'Service is healthy' })
   @ApiResponse({ status: 503, description: 'Service is unhealthy' })
-  async check() {
+  async check(@Res() reply: FastifyReply) {
     const checks: Record<string, { status: string; latency?: number }> = {};
     let healthy = true;
 
@@ -42,10 +43,12 @@ export class HealthController {
       healthy = false;
     }
 
-    return {
+    const body = {
       status: healthy ? 'healthy' : 'unhealthy',
       timestamp: new Date().toISOString(),
       checks,
     };
+
+    return reply.status(healthy ? 200 : 503).send(body);
   }
 }
