@@ -169,7 +169,7 @@ export class WorkspacesService {
   /**
    * Add a member to a workspace.
    */
-  async addMember(workspaceId: string, userId: string, role: string) {
+  async addMember(workspaceId: string, userId: string, role: 'owner' | 'admin' | 'member' | 'viewer') {
     // Verify workspace exists
     await this.findById(workspaceId);
 
@@ -256,7 +256,7 @@ export class WorkspacesService {
   async updateMemberRole(
     workspaceId: string,
     userId: string,
-    role: string,
+    role: 'owner' | 'admin' | 'member' | 'viewer',
   ) {
     const [member] = await this.db
       .select()

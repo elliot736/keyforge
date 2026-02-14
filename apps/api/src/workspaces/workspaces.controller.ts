@@ -6,7 +6,6 @@ import {
   Delete,
   Param,
   Body,
-  UsePipes,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -46,11 +45,10 @@ export class WorkspacesController {
    */
   @Post()
   @DashboardAuth()
-  @UsePipes(new ZodValidationPipe(createWorkspaceSchema))
   @ApiOperation({ summary: 'Create a workspace' })
   @ApiResponse({ status: 201, description: 'Workspace created' })
   async create(
-    @Body() body: CreateWorkspaceInput,
+    @Body(new ZodValidationPipe(createWorkspaceSchema)) body: CreateWorkspaceInput,
     @CurrentUser() user: SessionUser,
   ) {
     const workspace = await this.workspacesService.create(user.id, body);
