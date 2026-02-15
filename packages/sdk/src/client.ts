@@ -141,13 +141,17 @@ export class KeyForge {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), this.config.timeout);
 
+        const headers: Record<string, string> = {
+          'Authorization': `Bearer ${this.config.rootKey}`,
+          'User-Agent': 'keyforge-sdk/0.1.0',
+        };
+        if (body) {
+          headers['Content-Type'] = 'application/json';
+        }
+
         const res = await fetch(url, {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.config.rootKey}`,
-            'User-Agent': 'keyforge-sdk/0.1.0',
-          },
+          headers,
           body: body ? JSON.stringify(body) : undefined,
           signal: controller.signal,
         });

@@ -7,29 +7,29 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./express": {
+      "types": "./dist/middleware/express.d.ts",
       "import": "./dist/middleware/express.mjs",
-      "require": "./dist/middleware/express.js",
-      "types": "./dist/middleware/express.d.ts"
+      "require": "./dist/middleware/express.js"
     },
     "./hono": {
+      "types": "./dist/middleware/hono.d.ts",
       "import": "./dist/middleware/hono.mjs",
-      "require": "./dist/middleware/hono.js",
-      "types": "./dist/middleware/hono.d.ts"
+      "require": "./dist/middleware/hono.js"
     },
     "./nextjs": {
+      "types": "./dist/middleware/nextjs.d.ts",
       "import": "./dist/middleware/nextjs.mjs",
-      "require": "./dist/middleware/nextjs.js",
-      "types": "./dist/middleware/nextjs.d.ts"
+      "require": "./dist/middleware/nextjs.js"
     },
     "./fastify": {
+      "types": "./dist/middleware/fastify.d.ts",
       "import": "./dist/middleware/fastify.mjs",
-      "require": "./dist/middleware/fastify.js",
-      "types": "./dist/middleware/fastify.d.ts"
+      "require": "./dist/middleware/fastify.js"
     }
   },
   "scripts": {
