@@ -1,10 +1,12 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, sql, inArray } from 'drizzle-orm';
+import { eq, and, lte, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
 import { RedisService } from '../redis/redis.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
+import { AuditService } from '../audit/audit.service';
 import { generateId } from '@keyforge/shared';
 
 @Injectable()
@@ -14,6 +16,8 @@ export class UsageWorker {
   constructor(
     @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly redis: RedisService,
+    private readonly webhooksService: WebhooksService,
+    private readonly auditService: AuditService,
   ) {}
 
   // ─── Every minute: flush Redis usage counters to Postgres ─────────────────
@@ -52,24 +56,7 @@ export class UsageWorker {
         }
       } while (cursor !== '0');
 
-      // Clean up processed Redis keys
-      if (processed.length > 0) {
-        // Only delete keys that have been fully processed and are older than the current hour
-        const now = new Date();
-        const currentHourBucket = `${now.toISOString().slice(0, 13)}:00`;
-
-        const keysToDelete = processed.filter((key) => {
-          // Extract the hour bucket from the key: keyforge:usage:{keyId}:{hourBucket}
-          const parts = key.split(':');
-          const hourBucket = parts.slice(3).join(':');
-          return hourBucket < currentHourBucket;
-        });
-
-        if (keysToDelete.length > 0) {
-          await this.redis.del(...keysToDelete);
-          this.logger.debug(`Cleaned up ${keysToDelete.length} expired usage keys`);
-        }
-      }
+      // Keys are now atomically deleted in processHourlyBucket via MULTI/EXEC
 
       if (processed.length > 0) {
         this.logger.debug(`Flushed ${processed.length} usage counters to Postgres`);
@@ -112,21 +99,11 @@ export class UsageWorker {
 
       if (updates.length === 0) return;
 
-      // Batch update apiKeys.lastUsedAt
-      // Process in chunks to avoid overly large queries
-      const CHUNK_SIZE = 100;
-      for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
-        const chunk = updates.slice(i, i + CHUNK_SIZE);
-
-        // Use a CASE expression for batch update
-        const keyIds = chunk.map((u) => u.keyId);
-        const whenClauses = chunk
-          .map((u) => `WHEN '${u.keyId}' THEN '${u.lastUsedAt}'::timestamptz`)
-          .join(' ');
-
-        await this.db.execute(
-          sql`UPDATE api_keys SET last_used_at = CASE id ${sql.raw(whenClauses)} END, updated_at = now() WHERE id IN (${sql.raw(keyIds.map((id) => `'${id}'`).join(','))})`,
-        );
+      // Update apiKeys.lastUsedAt using parameterized queries
+      for (const { keyId, lastUsedAt } of updates) {
+        await this.db.update(schema.apiKeys)
+          .set({ lastUsedAt: new Date(parseInt(lastUsedAt)) })
+          .where(eq(schema.apiKeys.id, keyId));
       }
 
       // Clean up processed Redis keys
@@ -143,6 +120,90 @@ export class UsageWorker {
     }
   }
 
+  // ─── Every 5 minutes: expire keys past their expiresAt ──────────────────
+
+  @Cron('*/5 * * * *')
+  async expireKeys(): Promise<void> {
+    try {
+      const expiredKeys = await this.db
+        .select()
+        .from(schema.apiKeys)
+        .where(
+          and(
+            lte(schema.apiKeys.expiresAt, new Date()),
+            isNull(schema.apiKeys.revokedAt),
+            eq(schema.apiKeys.enabled, true),
+          ),
+        );
+
+      for (const key of expiredKeys) {
+        await this.db
+          .update(schema.apiKeys)
+          .set({ enabled: false })
+          .where(eq(schema.apiKeys.id, key.id));
+
+        await this.webhooksService.fireEvent(key.workspaceId, 'key.expired', {
+          keyId: key.id,
+          name: key.name,
+          expiresAt: key.expiresAt?.toISOString(),
+        });
+
+        await this.auditService.log({
+          workspaceId: key.workspaceId,
+          actorId: 'system',
+          actorType: 'system',
+          action: 'key.expired',
+          resourceType: 'api_key',
+          resourceId: key.id,
+          metadata: { expiresAt: key.expiresAt?.toISOString() },
+        });
+      }
+
+      if (expiredKeys.length > 0) {
+        this.logger.log(`Expired ${expiredKeys.length} keys`);
+      }
+    } catch (err) {
+      this.logger.error(
+        `Key expiration check failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // ─── Daily at 3am: clean up old audit logs per plan ─────────────────────
+
+  @Cron('0 3 * * *')
+  async cleanupAuditLogs(): Promise<void> {
+    try {
+      const workspaces = await this.db
+        .select({ id: schema.workspaces.id, plan: schema.workspaces.plan })
+        .from(schema.workspaces);
+
+      for (const ws of workspaces) {
+        let retentionDays: number | null = null;
+
+        if (ws.plan === 'free') {
+          retentionDays = 30;
+        } else if (ws.plan === 'pro') {
+          retentionDays = 365;
+        }
+        // enterprise: skip (unlimited retention)
+
+        if (retentionDays != null) {
+          const deleted = await this.auditService.cleanup(ws.id, retentionDays);
+          if (deleted > 0) {
+            this.logger.log(
+              `Cleaned ${deleted} audit logs for workspace ${ws.id} (plan: ${ws.plan}, retention: ${retentionDays}d)`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        `Audit log cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
   private async processHourlyBucket(redisKey: string): Promise<void> {
@@ -152,11 +213,16 @@ export class UsageWorker {
     if (parts.length < 4) return;
 
     const keyId = parts[2];
+    if (!keyId) return;
     const hourBucket = parts.slice(3).join(':');
     const period = hourBucket.slice(0, 10); // daily period, e.g. 2026-03-20
 
-    // Fetch all fields from the hash
-    const data = await this.redis.hgetall(redisKey);
+    // Atomically fetch and delete the hash to avoid double-counting
+    const pipeline = this.redis.multi();
+    pipeline.hgetall(redisKey);
+    pipeline.del(redisKey);
+    const results = await pipeline.exec();
+    const data = results?.[0]?.[1] as Record<string, string> | null;
     if (!data || Object.keys(data).length === 0) return;
 
     const requests = parseInt(data.requests ?? '0', 10);

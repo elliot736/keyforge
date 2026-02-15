@@ -3,8 +3,12 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { UsageService } from './usage.service';
 import { UsageController } from './usage.controller';
+import { UsageDashboardController } from './usage-dashboard.controller';
 import { UsageProcessor } from './usage.processor';
 import { UsageWorker } from './usage.worker';
+import { WebhooksModule } from '../webhooks/webhooks.module';
+import { AuditModule } from '../audit/audit.module';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
   imports: [
@@ -18,8 +22,11 @@ import { UsageWorker } from './usage.worker';
         },
       }),
     }),
+    WebhooksModule,
+    AuditModule,
+    WorkspacesModule,
   ],
-  controllers: [UsageController],
+  controllers: [UsageController, UsageDashboardController],
   providers: [UsageService, UsageProcessor, UsageWorker],
   exports: [UsageService],
 })

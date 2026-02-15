@@ -13,7 +13,7 @@ import { RedisService } from '../redis/redis.service';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import type { ReportUsageInput, GetUsageInput } from '@keyforge/shared';
 
-interface UsageTimeSeries {
+export interface UsageTimeSeries {
   period: string;
   requests: number;
   tokensInput: number;
@@ -21,7 +21,7 @@ interface UsageTimeSeries {
   costCents: number;
 }
 
-interface KeyUsageSummary {
+export interface KeyUsageSummary {
   keyId: string;
   requests: number;
   tokensInput: number;
@@ -29,7 +29,7 @@ interface KeyUsageSummary {
   costCents: number;
 }
 
-interface WorkspaceUsageSummary {
+export interface WorkspaceUsageSummary {
   requestsToday: number;
   requestsMonth: number;
   tokensMonth: number;
@@ -136,10 +136,12 @@ export class UsageService {
         break;
     }
 
+    const fromDate = new Date(from).toISOString();
+    const toDate = new Date(to).toISOString();
     const conditions = [
       eq(schema.usageRecords.workspaceId, workspaceId),
-      sql`${schema.usageRecords.createdAt} >= ${new Date(from)}`,
-      sql`${schema.usageRecords.createdAt} <= ${new Date(to)}`,
+      sql`${schema.usageRecords.createdAt} >= ${fromDate}::timestamptz`,
+      sql`${schema.usageRecords.createdAt} <= ${toDate}::timestamptz`,
     ];
 
     if (keyId) {
@@ -366,7 +368,7 @@ export class UsageService {
         await this.redis.sadd(thresholdKey, '100');
         await this.redis.expire(thresholdKey, 2764800);
         this.webhooksService
-          .fire(workspaceId, 'quota.exceeded', {
+          .fireEvent(workspaceId, 'quota.exceeded', {
             keyId,
             type,
             percentage: Math.round(percentage),
@@ -380,7 +382,7 @@ export class UsageService {
         await this.redis.sadd(thresholdKey, '90');
         await this.redis.expire(thresholdKey, 2764800);
         this.webhooksService
-          .fire(workspaceId, 'quota.warning', {
+          .fireEvent(workspaceId, 'quota.warning', {
             keyId,
             type,
             percentage: Math.round(percentage),
@@ -394,7 +396,7 @@ export class UsageService {
         await this.redis.sadd(thresholdKey, '80');
         await this.redis.expire(thresholdKey, 2764800);
         this.webhooksService
-          .fire(workspaceId, 'quota.warning', {
+          .fireEvent(workspaceId, 'quota.warning', {
             keyId,
             type,
             percentage: Math.round(percentage),
