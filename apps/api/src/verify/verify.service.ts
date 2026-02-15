@@ -87,26 +87,14 @@ export class VerifyService {
     }
 
     // 5. Check revocation (with grace period support)
+    // revokedAt is set to now + gracePeriod at revocation time.
+    // If current time is past revokedAt, the grace period has expired.
     if (keyData.revokedAt) {
       const revokedTime = new Date(keyData.revokedAt).getTime();
-      // If revokedAt is in the past and we still have cache data,
-      // the key is in a grace period (cache TTL = grace period).
-      // Once the cache expires, DB lookup will show revokedAt and we deny.
       if (Date.now() > revokedTime) {
-        // The key is revoked. If we got here from cache, it means
-        // the grace period hasn't expired (cache still alive).
-        // But we should still mark it as valid during grace.
-        // Actually, if the cache entry exists with a revokedAt set,
-        // the grace period TTL on the cache entry controls validity.
-        // Once the cache expires, the DB will show revokedAt and we deny.
-        // For now, if it's from cache and revokedAt is set, it's in grace period - still valid.
-        // If it's from DB and revokedAt is set, it's fully revoked.
-        if (!cached) {
-          // Came from DB, not from cache - fully revoked
-          return { valid: false, code: 'KEY_REVOKED' };
-        }
-        // From cache with revokedAt set = grace period, continue as valid
+        return { valid: false, code: 'KEY_REVOKED' };
       }
+      // Otherwise, grace period is still active - continue as valid
     }
 
     // 6. Check expiration
@@ -176,9 +164,13 @@ export class VerifyService {
       }
     }
 
-    // 10. Check usage limit (remaining uses)
+    // 10. Check usage limit (remaining uses) - decrement atomically in Redis
     if (keyData.usageLimit != null) {
-      if (keyData.remaining != null && keyData.remaining <= 0) {
+      const remainingKey = `keyforge:remaining:${keyData.id}`;
+      const newRemaining = await this.redis.decr(remainingKey);
+      if (newRemaining < 0) {
+        // Undo the decrement since we're rejecting
+        await this.redis.incr(remainingKey);
         return { valid: false, code: 'BUDGET_EXCEEDED' };
       }
     }
@@ -194,7 +186,15 @@ export class VerifyService {
       .set(`keyforge:lastused:${keyData.id}`, Date.now().toString())
       .catch(() => {});
 
-    // 13. Return full context
+    // 13. Read current usage from Redis
+    const month = this.getCurrentMonth();
+    const [requests, tokens] = await Promise.all([
+      // requests from hourly bucket (current hour only for speed)
+      this.redis.hget(`keyforge:usage:${keyData.id}:${hourBucket}`, 'requests'),
+      this.redis.get(`keyforge:usage:tokens:${keyData.id}:${month}`),
+    ]);
+
+    // 14. Return full context
     return {
       valid: true,
       keyId: keyData.id,
@@ -211,6 +211,10 @@ export class VerifyService {
             reset: rateLimitResult.reset,
           }
         : undefined,
+      usage: {
+        requests: parseInt(requests || '0', 10),
+        tokens: parseInt(tokens || '0', 10),
+      },
     };
   }
 
