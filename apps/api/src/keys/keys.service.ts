@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { eq, and, sql, isNull, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
@@ -24,7 +24,7 @@ import type {
   UpdateKeyInput,
   ListKeysInput,
   ApiKeyObject,
-  WebhookEvent,
+  RateLimitAlgorithm,
 } from '@keyforge/shared';
 
 /** Shape of data cached in Redis for a key. */
@@ -91,6 +91,8 @@ export class KeysService {
           ? Math.floor(rateLimitConfig.window / 1000)
           : null,
         rateLimitRefill: rateLimitConfig?.refillRate ?? null,
+        tokenBudget: input.tokenBudget ?? null,
+        spendCapCents: input.spendCapCents ?? null,
         expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         enabled: true,
         usageLimit: null,
@@ -98,6 +100,10 @@ export class KeysService {
         remaining: null,
       })
       .returning();
+
+    if (!record) {
+      throw new NotFoundException('Key could not be created');
+    }
 
     // Cache key data in Redis (5-minute TTL)
     const cached = this.buildCachedData(record);
@@ -113,7 +119,7 @@ export class KeysService {
       .log({
         workspaceId,
         actorId,
-        actorType: 'api_key',
+        actorType: 'root_key',
         action: 'key.created',
         resourceType: 'api_key',
         resourceId: keyId,
@@ -125,7 +131,7 @@ export class KeysService {
 
     // Fire webhook (fire-and-forget)
     this.webhooksService
-      .fire(workspaceId, 'key.created', {
+      .fireEvent(workspaceId, 'key.created', {
         keyId,
         name: input.name,
         environment: input.environment,
@@ -229,11 +235,8 @@ export class KeysService {
     if (input.name !== undefined) updateFields.name = input.name;
     if (input.scopes !== undefined) updateFields.scopes = input.scopes;
     if (input.meta !== undefined) updateFields.metadata = input.meta;
-    if (input.tokenBudget !== undefined) {
-      // tokenBudget stored in metadata since there's no column - store in a way verify can read
-      // Actually, we don't have a column. We'll use metadata for tokenBudget and spendCapCents.
-      // Wait - checking schema, there's no tokenBudget column. Let's use metadata to store these.
-    }
+    if (input.tokenBudget !== undefined) updateFields.tokenBudget = input.tokenBudget;
+    if (input.spendCapCents !== undefined) updateFields.spendCapCents = input.spendCapCents;
     if (input.rateLimitConfig !== undefined) {
       updateFields.rateLimitMax = input.rateLimitConfig.limit;
       updateFields.rateLimitWindow = Math.floor(
@@ -246,29 +249,15 @@ export class KeysService {
         input.expiresAt === null ? null : new Date(input.expiresAt);
     }
 
-    // Merge tokenBudget and spendCapCents into metadata
-    const currentMeta =
-      (input.meta !== undefined ? input.meta : existing.metadata) ?? {};
-    let metaChanged = false;
-    if (input.tokenBudget !== undefined) {
-      (currentMeta as Record<string, unknown>).__tokenBudget =
-        input.tokenBudget;
-      metaChanged = true;
-    }
-    if (input.spendCapCents !== undefined) {
-      (currentMeta as Record<string, unknown>).__spendCapCents =
-        input.spendCapCents;
-      metaChanged = true;
-    }
-    if (metaChanged) {
-      updateFields.metadata = currentMeta;
-    }
-
     const [updated] = await this.db
       .update(schema.apiKeys)
       .set(updateFields)
       .where(eq(schema.apiKeys.id, keyId))
       .returning();
+
+    if (!updated) {
+      throw new NotFoundException(`Key ${keyId} not found`);
+    }
 
     // Invalidate Redis cache
     await this.redis.del(`keyforge:key:${existing.keyHash}`);
@@ -287,7 +276,7 @@ export class KeysService {
       .log({
         workspaceId,
         actorId,
-        actorType: 'api_key',
+        actorType: 'root_key',
         action: 'key.updated',
         resourceType: 'api_key',
         resourceId: keyId,
@@ -327,7 +316,7 @@ export class KeysService {
       throw new HttpException('Key is already revoked', HttpStatus.CONFLICT);
     }
 
-    const revokedAt = new Date();
+    const revokedAt = new Date(Date.now() + gracePeriodMs);
 
     await this.db
       .update(schema.apiKeys)
@@ -360,7 +349,7 @@ export class KeysService {
       .log({
         workspaceId,
         actorId,
-        actorType: 'api_key',
+        actorType: 'root_key',
         action: 'key.revoked',
         resourceType: 'api_key',
         resourceId: keyId,
@@ -372,7 +361,7 @@ export class KeysService {
 
     // Webhook
     this.webhooksService
-      .fire(workspaceId, 'key.revoked', {
+      .fireEvent(workspaceId, 'key.revoked', {
         keyId,
         name: existing.name,
         gracePeriodMs,
@@ -425,9 +414,7 @@ export class KeysService {
     const newDisplayPrefix = extractKeyPrefix(newRawKey);
     const newKeyId = generateId('key');
 
-    const revokedAt = gracePeriodMs > 0
-      ? new Date()
-      : new Date();
+    const revokedAt = new Date(Date.now() + gracePeriodMs);
 
     // Transaction: revoke old key and insert new one
     await this.db.transaction(async (tx) => {
@@ -503,7 +490,7 @@ export class KeysService {
       .log({
         workspaceId,
         actorId,
-        actorType: 'api_key',
+        actorType: 'root_key',
         action: 'key.rotated',
         resourceType: 'api_key',
         resourceId: keyId,
@@ -519,7 +506,7 @@ export class KeysService {
 
     // Webhook
     this.webhooksService
-      .fire(workspaceId, 'key.rotated', {
+      .fireEvent(workspaceId, 'key.rotated', {
         oldKeyId: keyId,
         newKeyId,
         gracePeriodMs,
@@ -554,7 +541,6 @@ export class KeysService {
   private buildCachedData(
     row: typeof schema.apiKeys.$inferSelect,
   ): CachedKeyData {
-    const meta = (row.metadata as Record<string, unknown>) ?? {};
     return {
       id: row.id,
       workspaceId: row.workspaceId,
@@ -566,8 +552,8 @@ export class KeysService {
       rateLimitMax: row.rateLimitMax,
       rateLimitWindow: row.rateLimitWindow,
       rateLimitRefill: row.rateLimitRefill,
-      tokenBudget: (meta.__tokenBudget as number) ?? null,
-      spendCapCents: (meta.__spendCapCents as number) ?? null,
+      tokenBudget: row.tokenBudget ?? null,
+      spendCapCents: row.spendCapCents ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       revokedAt: row.revokedAt?.toISOString() ?? null,
       enabled: row.enabled,
@@ -579,12 +565,6 @@ export class KeysService {
   private mapRowToApiKeyObject(
     row: typeof schema.apiKeys.$inferSelect,
   ): ApiKeyObject {
-    const meta = (row.metadata as Record<string, unknown>) ?? {};
-    // Strip internal metadata keys from the public response
-    const publicMeta = { ...meta };
-    delete publicMeta.__tokenBudget;
-    delete publicMeta.__spendCapCents;
-
     return {
       id: row.id,
       workspaceId: row.workspaceId,
@@ -593,18 +573,18 @@ export class KeysService {
       ownerId: row.ownerId,
       environment: row.environment === 'test' ? 'development' : 'production',
       scopes: row.scopes ?? [],
-      meta: Object.keys(publicMeta).length > 0 ? publicMeta : null,
+      meta: row.metadata ?? null,
       rateLimitConfig:
         row.rateLimitMax != null
           ? {
-              algorithm: 'sliding_window',
+              algorithm: ((row as Record<string, unknown>).rateLimitAlgorithm as RateLimitAlgorithm) ?? 'sliding_window',
               limit: row.rateLimitMax,
               window: (row.rateLimitWindow ?? 60) * 1000,
               refillRate: row.rateLimitRefill ?? undefined,
             }
           : null,
-      tokenBudget: (meta.__tokenBudget as number) ?? null,
-      spendCapCents: (meta.__spendCapCents as number) ?? null,
+      tokenBudget: row.tokenBudget ?? null,
+      spendCapCents: row.spendCapCents ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       revokedAt: row.revokedAt?.toISOString() ?? null,
       lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
