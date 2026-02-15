@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { eq } from 'drizzle-orm';
+import { eq, and, gte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
@@ -151,16 +151,19 @@ export class BillingService {
     const periodStart = new Date((subscription.current_period_start as number) * 1000);
     const periodStartStr = periodStart.toISOString().slice(0, 10);
 
-    const usageRows = await this.db
+    const [usageResult] = await this.db
       .select({
-        totalVerifications: schema.usageRecords.verifications,
+        totalVerifications: sql<number>`coalesce(sum(${schema.usageRecords.verifications}), 0)::int`,
       })
       .from(schema.usageRecords)
       .where(
-        eq(schema.usageRecords.workspaceId, workspaceId),
+        and(
+          eq(schema.usageRecords.workspaceId, workspaceId),
+          gte(schema.usageRecords.period, periodStartStr),
+        ),
       );
 
-    const total = usageRows.reduce((sum, row) => sum + (row.totalVerifications ?? 0), 0);
+    const total = usageResult?.totalVerifications ?? 0;
 
     // Report usage to Stripe via meter events
     await this.stripe!.subscriptionItems.createUsageRecord(meteredItem.id, {

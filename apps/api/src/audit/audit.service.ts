@@ -12,6 +12,7 @@ export interface AuditLogInput {
   action: string;
   resourceType?: string;
   resourceId?: string;
+  metadata?: Record<string, unknown>;
   before?: Record<string, unknown>;
   after?: Record<string, unknown>;
   ipAddress?: string;
@@ -43,36 +44,34 @@ export class AuditService {
   /**
    * Write an audit log entry. Fire-and-forget: never blocks the calling request.
    */
-  log(params: AuditLogInput): void {
+  async log(params: AuditLogInput): Promise<void> {
     // Map actorType: the caller uses 'root_key' but the schema enum uses 'api_key'
     const actorType = params.actorType === 'root_key' ? 'api_key' : params.actorType;
 
-    const metadata: Record<string, unknown> = {};
+    const metadata: Record<string, unknown> = { ...params.metadata };
     if (params.before !== undefined) metadata.before = params.before;
     if (params.after !== undefined) metadata.after = params.after;
 
-    this.db
-      .insert(schema.auditLog)
-      .values({
-        id: generateId('aud'),
-        workspaceId: params.workspaceId,
-        actorId: params.actorId,
-        actorType: actorType as 'user' | 'api_key' | 'system',
-        action: params.action,
-        resourceType: params.resourceType ?? 'unknown',
-        resourceId: params.resourceId ?? null,
-        metadata: Object.keys(metadata).length > 0 ? metadata : null,
-        ipAddress: params.ipAddress ?? null,
-        userAgent: params.userAgent ?? null,
-      })
-      .then(() => {
-        this.logger.debug(`Audit log written: ${params.action}`);
-      })
-      .catch((error: unknown) => {
-        this.logger.error(
-          `Failed to write audit log: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      });
+    try {
+      await this.db
+        .insert(schema.auditLog)
+        .values({
+          id: generateId('aud'),
+          workspaceId: params.workspaceId,
+          actorId: params.actorId,
+          actorType: actorType as 'user' | 'api_key' | 'system',
+          action: params.action,
+          resourceType: params.resourceType ?? 'unknown',
+          resourceId: params.resourceId ?? null,
+          metadata: Object.keys(metadata).length > 0 ? metadata : null,
+          ipAddress: params.ipAddress ?? null,
+          userAgent: params.userAgent ?? null,
+        });
+      this.logger.debug(`Audit log written: ${params.action}`);
+    } catch (error) {
+      // Log but don't throw - audit should never break the caller
+      console.error('Audit log write failed:', error);
+    }
   }
 
   // ─── Query ──────────────────────────────────────────────────────────────────
