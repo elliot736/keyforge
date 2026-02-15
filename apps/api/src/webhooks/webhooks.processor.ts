@@ -6,7 +6,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
 import { signWebhookPayload } from '@keyforge/shared';
-import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.module';
+import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.constants';
 
 interface WebhookDeliveryJob {
   deliveryId: string;

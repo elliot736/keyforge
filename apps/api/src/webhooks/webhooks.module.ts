@@ -3,13 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { WebhooksService } from './webhooks.service';
 import { WebhooksController } from './webhooks.controller';
+import { WebhooksDashboardController } from './webhooks-dashboard.controller';
 import { WebhooksProcessor } from './webhooks.processor';
-
-export const WEBHOOK_DELIVERY_QUEUE = 'webhook-delivery';
+import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.constants';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Global()
 @Module({
   imports: [
+    WorkspacesModule,
     BullModule.registerQueueAsync({
       name: WEBHOOK_DELIVERY_QUEUE,
       inject: [ConfigService],
@@ -27,7 +29,7 @@ export const WEBHOOK_DELIVERY_QUEUE = 'webhook-delivery';
       },
     }),
   ],
-  controllers: [WebhooksController],
+  controllers: [WebhooksController, WebhooksDashboardController],
   providers: [WebhooksService, WebhooksProcessor],
   exports: [WebhooksService],
 })

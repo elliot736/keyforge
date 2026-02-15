@@ -12,7 +12,7 @@ import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
 import { generateId, generateWebhookSecret } from '@keyforge/shared';
 import type { CreateWebhookInput, UpdateWebhookInput } from '@keyforge/shared';
-import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.module';
+import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.constants';
 
 @Injectable()
 export class WebhooksService {
@@ -110,6 +110,10 @@ export class WebhooksService {
       .set(updateData)
       .where(eq(schema.webhookEndpoints.id, id))
       .returning();
+
+    if (!updated) {
+      throw new NotFoundException('Webhook endpoint not found');
+    }
 
     return {
       ...updated,
