@@ -61,14 +61,10 @@ export default function BillingPage() {
   const [billing, setBilling] = React.useState<BillingData | null>(null);
   const [loading, setLoading] = React.useState(true);
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   React.useEffect(() => {
     const fetchBilling = async () => {
       try {
-        const res = await fetch(`${base}/v1/workspaces/${workspace}/billing`, {
-          credentials: 'include',
-        });
+        const res = await fetch(`/api/proxy/workspaces/${workspace}/billing`);
         if (res.ok) {
           const data = await res.json();
           setBilling(data.data);
@@ -80,13 +76,12 @@ export default function BillingPage() {
       }
     };
     fetchBilling();
-  }, [base, workspace]);
+  }, [workspace]);
 
   const openPortal = async () => {
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/billing/portal`, {
+      const res = await fetch(`/api/proxy/workspaces/${workspace}/billing/portal`, {
         method: 'POST',
-        credentials: 'include',
       });
       if (res.ok) {
         const data = await res.json();
@@ -99,10 +94,9 @@ export default function BillingPage() {
 
   const handleUpgrade = async (plan: PlanName) => {
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/billing/checkout`, {
+      const res = await fetch(`/api/proxy/workspaces/${workspace}/billing/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ plan }),
       });
       if (res.ok) {

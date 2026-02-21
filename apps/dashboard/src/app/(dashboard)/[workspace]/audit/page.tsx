@@ -35,8 +35,6 @@ export default function AuditLogPage() {
   const [total, setTotal] = React.useState(0);
   const pageSize = 25;
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   const fetchEntries = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -48,8 +46,7 @@ export default function AuditLogPage() {
       if (actorFilter !== 'all') params.set('actorType', actorFilter);
 
       const res = await fetch(
-        `${base}/v1/workspaces/${workspace}/audit-log?${params}`,
-        { credentials: 'include' }
+        `/api/proxy/workspaces/${workspace}/audit-log?${params}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -61,7 +58,7 @@ export default function AuditLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [base, workspace, page, search, actionFilter, actorFilter]);
+  }, [workspace, page, search, actionFilter, actorFilter]);
 
   React.useEffect(() => {
     fetchEntries();
@@ -70,8 +67,7 @@ export default function AuditLogPage() {
   const handleExport = async () => {
     try {
       const res = await fetch(
-        `${base}/v1/workspaces/${workspace}/audit-log/export`,
-        { credentials: 'include' }
+        `/api/proxy/workspaces/${workspace}/audit-log/export`
       );
       if (res.ok) {
         const blob = await res.blob();

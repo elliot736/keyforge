@@ -22,9 +22,7 @@ export function WorkspaceSwitcher() {
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/workspaces`, {
-      credentials: 'include',
-    })
+    fetch(`/api/proxy/workspaces`)
       .then((res) => res.json())
       .then((data) => {
         setWorkspaces(data.data || []);
@@ -63,7 +61,7 @@ export function WorkspaceSwitcher() {
       >
         <div className="flex items-center gap-2 truncate">
           <div className="flex h-5 w-5 items-center justify-center rounded bg-primary text-[10px] font-bold text-primary-foreground">
-            {(currentWorkspace?.name || 'W')[0].toUpperCase()}
+            {(currentWorkspace?.name || 'W').charAt(0).toUpperCase()}
           </div>
           <span className="truncate font-medium">
             {currentWorkspace?.name || 'Select workspace'}
@@ -90,7 +88,7 @@ export function WorkspaceSwitcher() {
               }}
             >
               <div className="flex h-5 w-5 items-center justify-center rounded bg-primary text-[10px] font-bold text-primary-foreground">
-                {workspace.name[0].toUpperCase()}
+                {workspace.name.charAt(0).toUpperCase()}
               </div>
               <span className="truncate">{workspace.name}</span>
               {workspace.slug === currentSlug && (

@@ -33,14 +33,10 @@ export default function SettingsPage() {
   const [slug, setSlug] = React.useState('');
   const [deleteConfirm, setDeleteConfirm] = React.useState('');
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   React.useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${base}/v1/workspaces/${workspace}`, {
-          credentials: 'include',
-        });
+        const res = await fetch(`/api/proxy/workspaces/${workspace}`);
         if (res.ok) {
           const data = await res.json();
           setSettings(data.data);
@@ -54,15 +50,14 @@ export default function SettingsPage() {
       }
     };
     fetchSettings();
-  }, [base, workspace]);
+  }, [workspace]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}`, {
+      const res = await fetch(`/api/proxy/workspaces/${workspace}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name, slug }),
       });
       if (res.ok) {
@@ -81,9 +76,8 @@ export default function SettingsPage() {
     if (deleteConfirm !== settings?.name) return;
     if (!confirm('Are you absolutely sure? This action cannot be undone.')) return;
 
-    const res = await fetch(`${base}/v1/workspaces/${workspace}`, {
+    const res = await fetch(`/api/proxy/workspaces/${workspace}`, {
       method: 'DELETE',
-      credentials: 'include',
     });
     if (res.ok) {
       router.push('/');

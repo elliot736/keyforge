@@ -64,14 +64,12 @@ export default function WebhooksPage() {
   const [newEvents, setNewEvents] = React.useState<Set<string>>(new Set());
   const [creating, setCreating] = React.useState(false);
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const base = '/api/proxy';
 
   const fetchWebhooks = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/webhooks`, {
-        credentials: 'include',
-      });
+      const res = await fetch(`${base}/workspaces/${workspace}/webhooks`);
       if (res.ok) {
         const data = await res.json();
         setWebhooks(data.data || []);
@@ -81,7 +79,7 @@ export default function WebhooksPage() {
     } finally {
       setLoading(false);
     }
-  }, [base, workspace]);
+  }, [workspace]);
 
   React.useEffect(() => {
     fetchWebhooks();
@@ -92,8 +90,7 @@ export default function WebhooksPage() {
     setDeliveriesLoading(true);
     try {
       const res = await fetch(
-        `${base}/v1/workspaces/${workspace}/webhooks/${webhookId}/deliveries`,
-        { credentials: 'include' }
+        `${base}/workspaces/${workspace}/webhooks/${webhookId}/deliveries`,
       );
       if (res.ok) {
         const data = await res.json();
@@ -110,10 +107,9 @@ export default function WebhooksPage() {
     if (!newUrl || newEvents.size === 0) return;
     setCreating(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/webhooks`, {
+      const res = await fetch(`${base}/workspaces/${workspace}/webhooks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ url: newUrl, events: Array.from(newEvents) }),
       });
       if (res.ok) {
@@ -128,10 +124,9 @@ export default function WebhooksPage() {
   };
 
   const toggleActive = async (id: string, active: boolean) => {
-    await fetch(`${base}/v1/workspaces/${workspace}/webhooks/${id}`, {
+    await fetch(`${base}/workspaces/${workspace}/webhooks/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ active }),
     });
     fetchWebhooks();
@@ -140,17 +135,16 @@ export default function WebhooksPage() {
   const handleRetry = async (deliveryId: string) => {
     if (!selectedWebhook) return;
     await fetch(
-      `${base}/v1/workspaces/${workspace}/webhooks/${selectedWebhook}/deliveries/${deliveryId}/retry`,
-      { method: 'POST', credentials: 'include' }
+      `${base}/workspaces/${workspace}/webhooks/${selectedWebhook}/deliveries/${deliveryId}/retry`,
+      { method: 'POST' }
     );
     fetchDeliveries(selectedWebhook);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this webhook endpoint?')) return;
-    await fetch(`${base}/v1/workspaces/${workspace}/webhooks/${id}`, {
+    await fetch(`${base}/workspaces/${workspace}/webhooks/${id}`, {
       method: 'DELETE',
-      credentials: 'include',
     });
     if (selectedWebhook === id) setSelectedWebhook(null);
     fetchWebhooks();

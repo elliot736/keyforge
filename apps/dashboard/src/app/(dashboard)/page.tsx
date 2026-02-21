@@ -8,7 +8,7 @@ async function getWorkspaces() {
 
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/workspaces`,
+      `${process.env.API_URL || 'http://localhost:4000'}/v1/workspaces`,
       {
         headers: { Cookie: `better-auth.session_token=${sessionToken}` },
         cache: 'no-store',

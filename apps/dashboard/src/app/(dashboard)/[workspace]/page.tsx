@@ -8,12 +8,22 @@ import { Badge } from '@/components/ui/badge';
 import { UsageChart } from './usage-chart';
 import { formatDistanceToNow } from 'date-fns';
 
+interface WorkspaceStats {
+  totalKeys: number;
+  keysChange?: number;
+  requestsToday: number;
+  requestsChange?: number;
+  tokensThisMonth: number;
+  tokensChange?: number;
+  activeRateLimits: number;
+}
+
 interface Props {
   params: Promise<{ workspace: string }>;
 }
 
 async function fetchWorkspaceData(workspace: string, sessionToken: string) {
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const base = process.env.API_URL || 'http://localhost:4000';
   const headers = { Cookie: `better-auth.session_token=${sessionToken}` };
 
   const [statsRes, activityRes, usageRes] = await Promise.allSettled([
@@ -23,7 +33,7 @@ async function fetchWorkspaceData(workspace: string, sessionToken: string) {
   ]);
 
   const stats = statsRes.status === 'fulfilled' && statsRes.value.ok
-    ? await statsRes.value.json().then((d: { data: unknown }) => d.data)
+    ? await statsRes.value.json().then((d: { data: WorkspaceStats }) => d.data)
     : null;
   const activity = activityRes.status === 'fulfilled' && activityRes.value.ok
     ? await activityRes.value.json().then((d: { data: unknown }) => d.data)

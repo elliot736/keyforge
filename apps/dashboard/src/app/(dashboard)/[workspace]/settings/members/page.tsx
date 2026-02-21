@@ -52,14 +52,10 @@ export default function MembersPage() {
   const [inviteRole, setInviteRole] = React.useState<WorkspaceRole>('member');
   const [inviting, setInviting] = React.useState(false);
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   const fetchMembers = React.useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/members`, {
-        credentials: 'include',
-      });
+      const res = await fetch(`/api/proxy/workspaces/${workspace}/members`);
       if (res.ok) {
         const data = await res.json();
         setMembers(data.data || []);
@@ -69,7 +65,7 @@ export default function MembersPage() {
     } finally {
       setLoading(false);
     }
-  }, [base, workspace]);
+  }, [workspace]);
 
   React.useEffect(() => {
     fetchMembers();
@@ -79,10 +75,9 @@ export default function MembersPage() {
     if (!inviteEmail) return;
     setInviting(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/members/invite`, {
+      const res = await fetch(`/api/proxy/workspaces/${workspace}/members/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       });
       if (res.ok) {
@@ -97,10 +92,9 @@ export default function MembersPage() {
   };
 
   const handleChangeRole = async (memberId: string, role: WorkspaceRole) => {
-    await fetch(`${base}/v1/workspaces/${workspace}/members/${memberId}`, {
+    await fetch(`/api/proxy/workspaces/${workspace}/members/${memberId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
       body: JSON.stringify({ role }),
     });
     fetchMembers();
@@ -108,9 +102,8 @@ export default function MembersPage() {
 
   const handleRemove = async (memberId: string) => {
     if (!confirm('Remove this member from the workspace?')) return;
-    await fetch(`${base}/v1/workspaces/${workspace}/members/${memberId}`, {
+    await fetch(`/api/proxy/workspaces/${workspace}/members/${memberId}`, {
       method: 'DELETE',
-      credentials: 'include',
     });
     fetchMembers();
   };
@@ -187,7 +180,7 @@ export default function MembersPage() {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="text-xs">
-                            {(member.name || member.email)[0].toUpperCase()}
+                            {(member.name || member.email).charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div>

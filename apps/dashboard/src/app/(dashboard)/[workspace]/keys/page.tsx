@@ -52,8 +52,7 @@ export default function KeysPage() {
       if (statusFilter !== 'all') params.set('status', statusFilter);
 
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/workspaces/${workspace}/keys?${params}`,
-        { credentials: 'include' }
+        `/api/proxy/workspaces/${workspace}/keys?${params}`
       );
       if (res.ok) {
         const data = await res.json();
@@ -94,12 +93,10 @@ export default function KeysPage() {
     if (selectedIds.size === 0) return;
     if (!confirm(`Revoke ${selectedIds.size} selected key(s)?`)) return;
 
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
     await Promise.all(
       Array.from(selectedIds).map((id) =>
-        fetch(`${base}/v1/workspaces/${workspace}/keys/${id}/revoke`, {
+        fetch(`/api/proxy/workspaces/${workspace}/keys/${id}/revoke`, {
           method: 'POST',
-          credentials: 'include',
         })
       )
     );

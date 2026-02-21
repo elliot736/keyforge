@@ -26,7 +26,7 @@ interface CreateKeyDialogProps {
   onCreated: () => void;
 }
 
-type Step = 'basic' | 'scopes' | 'ratelimit' | 'review' | 'created';
+type Step = 'basic' | 'scopes' | 'ratelimit' | 'budgets' | 'review' | 'created';
 
 const COMMON_SCOPES = [
   'api.read',
@@ -57,6 +57,8 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
   const [rlAlgorithm, setRlAlgorithm] = React.useState<RateLimitAlgorithm>('sliding_window');
   const [rlLimit, setRlLimit] = React.useState('100');
   const [rlWindow, setRlWindow] = React.useState('60');
+  const [tokenBudget, setTokenBudget] = React.useState('');
+  const [spendCap, setSpendCap] = React.useState('');
 
   // Result
   const [createdKey, setCreatedKey] = React.useState<string | null>(null);
@@ -73,6 +75,8 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
     setRlAlgorithm('sliding_window');
     setRlLimit('100');
     setRlWindow('60');
+    setTokenBudget('');
+    setSpendCap('');
     setCreatedKey(null);
     setCopied(false);
     setSubmitting(false);
@@ -133,12 +137,18 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
         };
       }
 
+      if (tokenBudget) {
+        body.tokenBudget = parseInt(tokenBudget, 10);
+      }
+      if (spendCap) {
+        body.spendCapCents = Math.round(parseFloat(spendCap) * 100);
+      }
+
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/v1/workspaces/${workspace}/keys`,
+        `/api/proxy/workspaces/${workspace}/keys`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
           body: JSON.stringify(body),
         }
       );
@@ -165,7 +175,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
     }
   };
 
-  const steps: Step[] = ['basic', 'scopes', 'ratelimit', 'review'];
+  const steps: Step[] = ['basic', 'scopes', 'ratelimit', 'budgets', 'review'];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -179,6 +189,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
             {step === 'basic' && 'Configure basic key settings.'}
             {step === 'scopes' && 'Define what this key can access.'}
             {step === 'ratelimit' && 'Configure rate limiting (optional).'}
+            {step === 'budgets' && 'Set token and spend limits (optional).'}
             {step === 'review' && 'Review and create your key.'}
             {step === 'created' && 'Save your key now. It will not be shown again.'}
           </DialogDescription>
@@ -369,6 +380,41 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
           </div>
         )}
 
+        {/* Step: Budgets */}
+        {step === 'budgets' && (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="tokenBudget">Monthly token budget</Label>
+              <Input
+                id="tokenBudget"
+                type="number"
+                placeholder="e.g., 1000000"
+                value={tokenBudget}
+                onChange={(e) => setTokenBudget(e.target.value)}
+                min={0}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Maximum tokens this key can consume per month. Leave empty for unlimited.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="spendCap">Monthly spend cap ($)</Label>
+              <Input
+                id="spendCap"
+                type="number"
+                placeholder="e.g., 50.00"
+                value={spendCap}
+                onChange={(e) => setSpendCap(e.target.value)}
+                min={0}
+                step="0.01"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Maximum dollar amount per month. Leave empty for unlimited.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Step: Review */}
         {step === 'review' && (
           <div className="space-y-3">
@@ -398,6 +444,18 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
                   <span className="text-muted-foreground">Rate Limit</span>
                   <span className="font-medium">
                     {rateLimitEnabled ? `${rlLimit} req / ${rlWindow}s` : 'Disabled'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Token Budget</span>
+                  <span className="font-medium">
+                    {tokenBudget ? `${parseInt(tokenBudget, 10).toLocaleString()} tokens/mo` : 'Unlimited'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Spend Cap</span>
+                  <span className="font-medium">
+                    {spendCap ? `$${parseFloat(spendCap).toFixed(2)}/mo` : 'Unlimited'}
                   </span>
                 </div>
               </div>
@@ -435,7 +493,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
                 variant="outline"
                 onClick={() => {
                   if (stepIndex === 0) handleClose(false);
-                  else setStep(steps[stepIndex - 1]);
+                  else setStep(steps[stepIndex - 1] as Step);
                 }}
               >
                 {stepIndex === 0 ? 'Cancel' : 'Back'}
@@ -445,7 +503,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
                   {submitting ? 'Creating...' : 'Create Key'}
                 </Button>
               ) : (
-                <Button onClick={() => setStep(steps[stepIndex + 1])}>Continue</Button>
+                <Button onClick={() => setStep(steps[stepIndex + 1] as Step)}>Continue</Button>
               )}
             </div>
           )}

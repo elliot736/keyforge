@@ -35,15 +35,11 @@ export default function KeyDetailPage() {
   const [rotating, setRotating] = React.useState(false);
   const [newKey, setNewKey] = React.useState<string | null>(null);
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   const fetchKey = React.useCallback(async () => {
     try {
       const [keyRes, usageRes] = await Promise.all([
-        fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}`, { credentials: 'include' }),
-        fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}/usage?period=7d`, {
-          credentials: 'include',
-        }),
+        fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}`),
+        fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}/usage?period=7d`),
       ]);
       if (keyRes.ok) {
         const data = await keyRes.json();
@@ -58,7 +54,7 @@ export default function KeyDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [base, workspace, keyId]);
+  }, [workspace, keyId]);
 
   React.useEffect(() => {
     fetchKey();
@@ -68,9 +64,8 @@ export default function KeyDetailPage() {
     if (!confirm('Rotate this key? The current key will stop working immediately.')) return;
     setRotating(true);
     try {
-      const res = await fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}/rotate`, {
+      const res = await fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}/rotate`, {
         method: 'POST',
-        credentials: 'include',
       });
       if (res.ok) {
         const data = await res.json();
@@ -84,9 +79,8 @@ export default function KeyDetailPage() {
 
   const handleRevoke = async () => {
     if (!confirm('Revoke this key? This action cannot be undone.')) return;
-    const res = await fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}/revoke`, {
+    const res = await fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}/revoke`, {
       method: 'POST',
-      credentials: 'include',
     });
     if (res.ok) {
       fetchKey();
@@ -244,6 +238,22 @@ export default function KeyDetailPage() {
                 <p className="text-sm text-muted-foreground">Owner ID</p>
                 <p className="truncate text-sm font-mono">
                   {key.ownerId || 'None'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Token Budget</p>
+                <p className="text-sm">
+                  {key.tokenBudget != null
+                    ? `${key.tokenBudget.toLocaleString()} tokens`
+                    : 'Unlimited'}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Spend Cap</p>
+                <p className="text-sm">
+                  {key.spendCapCents != null
+                    ? `$${(key.spendCapCents / 100).toFixed(2)}`
+                    : 'Unlimited'}
                 </p>
               </div>
             </div>

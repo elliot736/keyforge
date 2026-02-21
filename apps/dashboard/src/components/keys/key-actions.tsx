@@ -20,26 +20,22 @@ interface KeyActionsProps {
 
 export function KeyActions({ keyId, workspace, onAction }: KeyActionsProps) {
   const router = useRouter();
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   const handleCopyId = () => {
     navigator.clipboard.writeText(keyId);
   };
 
   const handleRotate = async () => {
     if (!confirm('Rotate this key? The current key will stop working immediately.')) return;
-    const res = await fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}/rotate`, {
+    const res = await fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}/rotate`, {
       method: 'POST',
-      credentials: 'include',
     });
     if (res.ok) onAction();
   };
 
   const handleRevoke = async () => {
     if (!confirm('Revoke this key? This action cannot be undone.')) return;
-    const res = await fetch(`${base}/v1/workspaces/${workspace}/keys/${keyId}/revoke`, {
+    const res = await fetch(`/api/proxy/workspaces/${workspace}/keys/${keyId}/revoke`, {
       method: 'POST',
-      credentials: 'include',
     });
     if (res.ok) onAction();
   };

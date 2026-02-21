@@ -58,8 +58,6 @@ export default function UsagePage() {
   const [loading, setLoading] = React.useState(true);
   const [data, setData] = React.useState<UsageData | null>(null);
 
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
   React.useEffect(() => {
     const fetchUsage = async () => {
       setLoading(true);
@@ -69,8 +67,7 @@ export default function UsagePage() {
         if (envFilter !== 'all') params.set('environment', envFilter);
 
         const res = await fetch(
-          `${base}/v1/workspaces/${workspace}/usage?${params}`,
-          { credentials: 'include' }
+          `/api/proxy/workspaces/${workspace}/usage?${params}`
         );
         if (res.ok) {
           const json = await res.json();
@@ -83,7 +80,7 @@ export default function UsagePage() {
       }
     };
     fetchUsage();
-  }, [base, workspace, period, keyFilter, envFilter]);
+  }, [workspace, period, keyFilter, envFilter]);
 
   const summaryCards = [
     {
