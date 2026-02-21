@@ -1,4 +1,9 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+// Server components call the API directly (server-to-server, same network)
+// Client components go through the Next.js proxy to handle auth cookies
+const isServer = typeof window === 'undefined';
+const API_BASE = isServer
+  ? (process.env.API_URL || 'http://localhost:4000')
+  : '/api/proxy';
 
 export interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
