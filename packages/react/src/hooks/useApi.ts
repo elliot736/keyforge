@@ -100,6 +100,7 @@ export function useApiMutate() {
         throw new Error(body.message ?? body.error ?? `Request failed (${res.status})`);
       }
 
+      if (res.status === 204) return undefined as T;
       const json = await res.json();
       return (json.data ?? json) as T;
     },

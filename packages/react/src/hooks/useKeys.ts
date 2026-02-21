@@ -18,6 +18,11 @@ export interface CreateKeyParams {
   };
 }
 
+interface ApiCreateKeyResponse {
+  key: string;
+  keyId: string;
+}
+
 export interface CreateKeyResult {
   id: string;
   key: string;
@@ -61,12 +66,12 @@ export function useKeys(): UseKeysResult {
 
   const createKey = useCallback(
     async (params: CreateKeyParams): Promise<CreateKeyResult> => {
-      const result = await mutate<CreateKeyResult>('/v1/keys', {
+      const result = await mutate<ApiCreateKeyResponse>('/v1/keys', {
         method: 'POST',
         body: { ...params, workspaceId },
       });
       refetch();
-      return result;
+      return { id: result.keyId, key: result.key, prefix: result.key.substring(0, 12) + '...' };
     },
     [mutate, workspaceId, refetch],
   );

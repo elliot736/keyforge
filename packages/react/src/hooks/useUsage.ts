@@ -22,8 +22,11 @@ export interface UseUsageResult {
 }
 
 function getTimeRangeParams(range: TimeRange): { from: string; to: string; granularity: Granularity } {
-  const to = new Date();
-  const from = new Date();
+  // Round to the nearest hour to produce stable values and avoid infinite re-render loops
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  const to = now;
+  const from = new Date(to);
 
   switch (range) {
     case '24h':
