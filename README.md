@@ -115,7 +115,9 @@ The verify call checks validity, enforces rate limits, checks token budgets and 
 ## SDK
 
 ```bash
-npm install @keyforge/sdk
+# Available as a workspace package in the monorepo
+# or install directly from GitHub:
+npm install github:elliot736/keyforge#main
 ```
 
 ### Express/Fastify/Hono/Next.js Middleware
@@ -326,7 +328,7 @@ await kf.usage.report({
 Let your customers manage their own API keys without you building a UI:
 
 ```bash
-npm install @keyforge/react
+# Available as a workspace package in the monorepo
 ```
 
 ```tsx
