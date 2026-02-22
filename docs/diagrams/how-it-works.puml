@@ -1,0 +1,39 @@
+@startuml how-it-works
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 12
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+title Integration Flow
+
+participant "Customer" as C
+participant "Your API" as You
+participant "KeyForge" as KF
+
+C -> You: Request with API key
+activate You
+
+You -> KF: POST /v1/keys.verifyKey\n{ key: "sk_..." }
+activate KF
+KF --> You: { valid, scopes, meta,\n  rateLimit, usage }
+deactivate KF
+
+alt valid = true
+    You -> You: Process request
+    You --> C: Response
+
+    opt Token-based API (LLM, AI)
+        You -> KF: POST /v1/usage.report\n{ tokens, model, cost }
+        activate KF
+        KF --> You: OK
+        deactivate KF
+    end
+else valid = false
+    You --> C: 401 / 403 / 429
+end
+
+deactivate You
+@enduml
