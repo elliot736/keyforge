@@ -1,0 +1,65 @@
+@startuml aws-infra
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+title AWS Infrastructure (Terraform)
+
+cloud "Internet" as inet
+
+package "VPC 10.0.0.0/16" as vpc {
+
+    package "Public Subnets (2 AZs)" as pub {
+        [ALB\nport 80/443] as ALB
+        [NAT Gateway] as NAT
+    }
+
+    package "Private Subnets (2 AZs)" as priv {
+        package "ECS Fargate Cluster" as ecs {
+            [API Service\n(2+ tasks)\nport 4000] as APISvc
+            [Dashboard Service\n(2+ tasks)\nport 3000] as DashSvc
+        }
+
+        database "RDS PostgreSQL 16\n(encrypted, multi-AZ)" as RDS
+        database "ElastiCache Redis 7\n(allkeys-lru)" as ElastiCache
+    }
+}
+
+package "AWS Services" as aws_svc {
+    [ECR\n(image registry)] as ECR
+    [Secrets Manager\n(DB URL, Redis URL,\nauth secrets)] as Secrets
+    [CloudWatch\n(logs, metrics,\nalarms)] as CW
+    [SNS\n(alert notifications)] as SNS
+    [ACM\n(TLS certificate)] as ACM
+}
+
+package "CI/CD (GitHub Actions)" as cicd {
+    [Build & Push\nimages] as Build
+    [ECS Deploy\n(rolling update)] as Deploy
+    [Terraform\nPlan/Apply] as TF
+}
+
+inet --> ALB
+ALB --> APISvc : /health, /v1/*
+ALB --> DashSvc : /*
+
+APISvc --> RDS
+APISvc --> ElastiCache
+APISvc --> Secrets
+DashSvc --> APISvc : internal
+
+APISvc --> CW : logs
+DashSvc --> CW : logs
+CW --> SNS : alarms
+
+NAT --> inet : outbound\n(ECR pulls)
+
+ACM --> ALB : TLS cert
+
+Build --> ECR : docker push
+Deploy --> ecs : force-new-deployment
+TF --> vpc : provision
+@enduml

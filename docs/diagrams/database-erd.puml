@@ -1,0 +1,125 @@
+@startuml database-erd
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+title Database Schema
+
+entity "workspaces" as ws {
+    * id : text <<PK>>
+    --
+    name : text
+    slug : text <<unique>>
+    plan : enum (free/pro/enterprise)
+    stripe_customer_id : text
+    stripe_subscription_id : text
+    enabled : boolean
+    metadata : jsonb
+    created_at : timestamptz
+}
+
+entity "workspace_members" as wm {
+    * workspace_id : text <<FK>>
+    * user_id : text
+    --
+    role : enum (owner/admin/member/viewer)
+    created_at : timestamptz
+}
+
+entity "api_keys" as ak {
+    * id : text <<PK>>
+    --
+    workspace_id : text <<FK>>
+    name : text
+    key_hash : text <<unique>>
+    prefix : varchar(16)
+    owner_id : text
+    environment : enum (live/test)
+    scopes : jsonb
+    metadata : jsonb
+    rate_limit_max : integer
+    rate_limit_window : integer
+    token_budget : bigint
+    spend_cap_cents : integer
+    expires_at : timestamptz
+    enabled : boolean
+    revoked_at : timestamptz
+    last_used_at : timestamptz
+    created_at : timestamptz
+}
+
+entity "usage_records" as ur {
+    * id : text <<PK>>
+    --
+    key_id : text <<FK>>
+    workspace_id : text <<FK>>
+    period : text
+    verifications : bigint
+    tokens_input : bigint
+    tokens_output : bigint
+    cost_cents : integer
+    model : text
+    created_at : timestamptz
+}
+
+entity "webhook_endpoints" as we {
+    * id : text <<PK>>
+    --
+    workspace_id : text <<FK>>
+    url : text
+    secret : text
+    events : jsonb
+    enabled : boolean
+    created_at : timestamptz
+}
+
+entity "webhook_deliveries" as wd {
+    * id : text <<PK>>
+    --
+    endpoint_id : text <<FK>>
+    event : text
+    payload : jsonb
+    status : enum
+    attempts : integer
+    response_status : integer
+    created_at : timestamptz
+}
+
+entity "audit_log" as al {
+    * id : text <<PK>>
+    --
+    workspace_id : text <<FK>>
+    actor_id : text
+    actor_type : enum (user/api_key/system)
+    action : text
+    resource_type : text
+    resource_id : text
+    metadata : jsonb
+    ip_address : text
+    timestamp : timestamptz
+}
+
+entity "root_keys" as rk {
+    * id : text <<PK>>
+    --
+    workspace_id : text <<FK>>
+    name : text
+    key_hash : text <<unique>>
+    scopes : jsonb
+    enabled : boolean
+    expires_at : timestamptz
+    created_at : timestamptz
+}
+
+ws ||--|{ wm
+ws ||--|{ ak
+ws ||--|{ ur
+ws ||--|{ we
+ws ||--|{ al
+ws ||--|{ rk
+ak ||--|{ ur
+we ||--|{ wd
+@enduml

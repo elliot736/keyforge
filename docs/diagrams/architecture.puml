@@ -1,0 +1,74 @@
+@startuml architecture
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 12
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+title System Architecture
+
+package "Your Infrastructure" {
+    [Your API] as YourAPI
+    [Your Frontend] as YourFE
+}
+
+package "KeyForge" {
+    package "Applications" {
+        [NestJS API\nport 4000] as API
+        [Next.js Dashboard\nport 3000] as Dashboard
+    }
+
+    package "Data Layer" {
+        database "PostgreSQL 16" as PG {
+            [api_keys]
+            [usage_records]
+            [audit_log]
+            [workspaces]
+            [webhooks]
+        }
+        database "Redis 7" as Redis {
+            [Key Cache]
+            [Rate Limiters\n(Lua Scripts)]
+            [Usage Counters]
+            [BullMQ Queues]
+        }
+    }
+
+    package "Background Workers" {
+        [Usage Aggregator\n(every 1m)] as UsageWorker
+        [Key Expiration\n(every 5m)] as ExpiryWorker
+        [Audit Cleanup\n(daily 3am)] as AuditWorker
+        [Webhook Delivery\n(BullMQ)] as WebhookWorker
+    }
+}
+
+package "External" {
+    cloud "Stripe" as Stripe
+    [Webhook\nEndpoints] as WHTargets
+}
+
+YourAPI --> API : SDK verify/report\n(root key auth)
+YourFE ..> Dashboard : Admin UI\n(session auth)
+
+Dashboard --> API : /api/proxy/*\n(internal)
+
+API --> PG
+API --> Redis
+
+UsageWorker --> Redis : SCAN + HGETALL
+UsageWorker --> PG : Batch upsert
+
+ExpiryWorker --> PG : Find expired keys
+ExpiryWorker --> WebhookWorker : key.expired
+
+AuditWorker --> PG : DELETE old entries
+
+WebhookWorker --> WHTargets : POST + HMAC-SHA256
+WebhookWorker --> Redis : Job queue
+
+API --> Stripe : Checkout/Portal
+Stripe --> API : Webhooks
+@enduml

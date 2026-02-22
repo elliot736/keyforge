@@ -1,0 +1,59 @@
+@startuml verify-flow
+!theme plain
+skinparam backgroundColor white
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 12
+
+title Key Verification Flow
+
+participant "Client" as C
+participant "API\n/v1/keys.verifyKey" as API
+participant "Redis" as R
+participant "Postgres" as DB
+
+C -> API: POST { key: "sk_..." }
+activate API
+
+API -> API: SHA-256 hash(key)
+
+API -> R: GET keyforge:key:{hash}
+activate R
+
+alt Cache hit
+    R --> API: key data (JSON)
+    deactivate R
+else Cache miss
+    R --> API: null
+    deactivate R
+    API -> DB: SELECT * FROM api_keys\nWHERE key_hash = {hash}
+    activate DB
+    DB --> API: row
+    deactivate DB
+    API -> R: SET keyforge:key:{hash}\n(TTL 300s)
+end
+
+API -> API: Check enabled
+API -> API: Check revoked (grace period)
+API -> API: Check expired
+
+group Rate Limit [Redis Lua Script]
+    API -> R: EVALSHA sliding_window.lua
+    activate R
+    R --> API: { allowed, remaining, reset }
+    deactivate R
+end
+
+alt Rate limited
+    API --> C: { valid: false,\n  code: "RATE_LIMITED" }
+else Allowed
+    API -> R: GET token budget counter
+    API -> R: GET spend cap counter
+    API -> R: HINCRBY usage counter (async)
+    API --> C: { valid: true,\n  keyId, scopes, meta,\n  rateLimit, usage }
+end
+
+deactivate API
+@enduml

@@ -1,0 +1,54 @@
+@startuml key-lifecycle
+!theme plain
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam defaultFontSize 12
+
+title API Key Lifecycle
+
+[*] --> Created : POST /v1/keys.createKey
+
+state Created {
+    state "Active" as Active
+    state "Rate Limited" as RL
+    state "Budget Exceeded" as BE
+
+    Active --> RL : Requests exceed\nrate limit window
+    RL --> Active : Window resets
+    Active --> BE : Token budget or\nspend cap reached
+    BE --> Active : Monthly reset
+}
+
+Created --> Rotated : POST /v1/keys.rotateKey
+Created --> Revoked : POST /v1/keys.revokeKey
+Created --> Expired : expiresAt reached\n(cron every 5m)
+
+state Rotated {
+    state "Grace Period" as GP {
+        state "Old key valid" as OldValid
+        state "New key active" as NewActive
+        OldValid --> [*] : Grace period ends
+    }
+}
+
+state Revoked {
+    state "Grace Active" as GraceRevoke
+    state "Fully Revoked" as FullRevoke
+    GraceRevoke --> FullRevoke : gracePeriodMs expires
+}
+
+Expired --> [*]
+Revoked --> [*]
+
+note right of Created
+    Key shown once at creation.
+    Only SHA-256 hash stored.
+end note
+
+note right of Rotated
+    Both old and new keys
+    work during grace period.
+    Default: 5 minutes.
+end note
+@enduml
