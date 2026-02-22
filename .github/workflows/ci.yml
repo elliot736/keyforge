@@ -1,0 +1,178 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "9"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @keyforge/shared run build
+      - run: pnpm --filter @keyforge/sdk run build
+      - run: pnpm --filter @keyforge/react run build
+      - run: pnpm --filter @keyforge/api run build
+      - name: Upload API build
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-dist
+          path: apps/api/dist
+          retention-days: 1
+
+  test-shared:
+    name: Test Shared
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @keyforge/shared run build
+      - run: pnpm --filter @keyforge/shared run test
+
+  test-api-unit:
+    name: Test API (Unit)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @keyforge/shared run build
+      - run: pnpm --filter @keyforge/api run test
+
+  test-api-e2e:
+    name: Test API (Integration)
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: keyforge
+          POSTGRES_PASSWORD: keyforge
+          POSTGRES_DB: keyforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://keyforge:keyforge@localhost:5432/keyforge
+      REDIS_URL: redis://localhost:6379
+      BETTER_AUTH_SECRET: ci-test-secret-minimum-16-chars
+      BETTER_AUTH_URL: http://localhost:3000
+      API_PORT: "4000"
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @keyforge/shared run build
+
+      - name: Push database schema
+        run: pnpm --filter @keyforge/api exec drizzle-kit push --force
+
+      - name: Create better-auth tables
+        run: |
+          PGPASSWORD=keyforge psql -h localhost -U keyforge -d keyforge -c "
+          CREATE TABLE IF NOT EXISTS \"user\" (
+            id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+            email_verified BOOLEAN NOT NULL DEFAULT false, image TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS session (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES \"user\"(id) ON DELETE CASCADE,
+            token TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL,
+            ip_address TEXT, user_agent TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS account (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES \"user\"(id) ON DELETE CASCADE,
+            account_id TEXT NOT NULL, provider_id TEXT NOT NULL,
+            access_token TEXT, refresh_token TEXT, access_token_expires_at TIMESTAMPTZ,
+            refresh_token_expires_at TIMESTAMPTZ, scope TEXT, id_token TEXT, password TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          CREATE TABLE IF NOT EXISTS verification (
+            id TEXT PRIMARY KEY, identifier TEXT NOT NULL, value TEXT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );"
+
+      - name: Run integration tests
+        run: pnpm --filter @keyforge/api run test:e2e
+
+      - name: Start API and verify health
+        run: |
+          pnpm --filter @keyforge/api run build
+          node apps/api/dist/main.js &
+          sleep 5
+          curl -sf http://localhost:4000/health | jq .
+          kill %1
+
+  typecheck:
+    name: Typecheck
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @keyforge/shared run build
+      - run: pnpm --filter @keyforge/api run build
