@@ -5,6 +5,9 @@ import type {
   ApiKeyObject,
   ReportUsageInput,
   GetUsageInput,
+  ModelBreakdown,
+  TokenTrend,
+  CostProjection,
 } from '@keyforge/shared';
 
 // Usage types not yet exported from shared — define locally
@@ -74,7 +77,7 @@ export class KeyForge {
       this.request<{ key: string; keyId: string }>('POST', '/v1/keys.createKey', input),
 
     /** Verify an API key and return its metadata + rate-limit state */
-    verify: (input: { key: string }) =>
+    verify: (input: { key: string; model?: string }) =>
       this.request<VerifyKeyResponse>('POST', '/v1/keys.verifyKey', input),
 
     /** Revoke an API key, optionally with a grace period */
@@ -112,6 +115,22 @@ export class KeyForge {
     /** Get a high-level usage summary for a workspace */
     summary: (workspaceId: string) =>
       this.request<WorkspaceUsageSummary>('GET', '/v1/usage/summary', undefined, { workspaceId }),
+  };
+
+  // ── Analytics ──────────────────────────────────────────────────────
+
+  readonly analytics = {
+    /** Get cost and token breakdown by model */
+    models: (params: { from: string; to: string }) =>
+      this.request<ModelBreakdown[]>('GET', '/v1/analytics/models', undefined, params as Record<string, unknown>),
+
+    /** Get token input/output trends over time */
+    tokenTrends: (params: { from: string; to: string; granularity?: string }) =>
+      this.request<TokenTrend[]>('GET', '/v1/analytics/tokens', undefined, params as Record<string, unknown>),
+
+    /** Get projected monthly cost based on current spending */
+    projection: () =>
+      this.request<CostProjection>('GET', '/v1/analytics/projection'),
   };
 
   // ── Internal request helper ──────────────────────────────────────────

@@ -87,6 +87,17 @@ export class UsageService {
     pipeline.incrby(monthCostKey, costCents);
     pipeline.expire(monthCostKey, 2764800); // 32 days
 
+    // Per-model token and cost tracking
+    if (input.model) {
+      const modelTokensKey = `keyforge:usage:tokens:${keyId}:${input.model}:${month}`;
+      pipeline.incrby(modelTokensKey, tokensInput + tokensOutput);
+      pipeline.expire(modelTokensKey, 2764800);
+
+      const modelCostKey = `keyforge:usage:cost:${keyId}:${input.model}:${month}`;
+      pipeline.incrby(modelCostKey, costCents);
+      pipeline.expire(modelCostKey, 2764800);
+    }
+
     // Track lastUsedAt in Redis for batch syncing
     pipeline.set(`keyforge:lastused:${keyId}`, now.toISOString());
 
@@ -155,6 +166,9 @@ export class UsageService {
         successes: sql<number>`sum(${schema.usageRecords.successes})::int`.as('successes'),
         rateLimited: sql<number>`sum(${schema.usageRecords.rateLimited})::int`.as('rate_limited'),
         usageExceeded: sql<number>`sum(${schema.usageRecords.usageExceeded})::int`.as('usage_exceeded'),
+        tokensInput: sql<number>`sum(${schema.usageRecords.tokensInput})::int`.as('tokens_input'),
+        tokensOutput: sql<number>`sum(${schema.usageRecords.tokensOutput})::int`.as('tokens_output'),
+        costCents: sql<number>`sum(${schema.usageRecords.costCents})::int`.as('cost_cents'),
       })
       .from(schema.usageRecords)
       .where(and(...conditions))
@@ -166,9 +180,9 @@ export class UsageService {
     return rows.map((row) => ({
       period: row.period,
       requests: row.requests ?? 0,
-      tokensInput: 0,
-      tokensOutput: 0,
-      costCents: 0,
+      tokensInput: row.tokensInput ?? 0,
+      tokensOutput: row.tokensOutput ?? 0,
+      costCents: row.costCents ?? 0,
     }));
   }
 

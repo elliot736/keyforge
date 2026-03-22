@@ -28,6 +28,7 @@ interface KeyData {
   enabled: boolean;
   usageLimit: number | null;
   remaining: number | null;
+  modelPolicies: Record<string, { tokenBudget?: number; spendCapCents?: number; rateLimitMax?: number; rateLimitWindow?: number; blocked?: boolean }> | null;
 }
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
@@ -44,7 +45,7 @@ export class VerifyService {
 
   // ─── Verify (HOT PATH) ──────────────────────────────────────────────────
 
-  async verify(rawKey: string): Promise<VerifyKeyResponse> {
+  async verify(rawKey: string, model?: string): Promise<VerifyKeyResponse> {
     // 1. Hash the key
     const hash = hashApiKey(rawKey);
 
@@ -164,6 +165,72 @@ export class VerifyService {
       }
     }
 
+    // 9b. Model-specific policy checks
+    if (model && keyData.modelPolicies?.[model]) {
+      const policy = keyData.modelPolicies[model];
+
+      // Check if model is blocked
+      if (policy.blocked) {
+        return { valid: false, code: 'MODEL_BLOCKED' };
+      }
+
+      // Model-specific rate limit
+      if (policy.rateLimitMax != null && policy.rateLimitMax > 0) {
+        const modelRlConfig: RateLimitConfig = {
+          algorithm: 'sliding_window',
+          limit: policy.rateLimitMax,
+          window: (policy.rateLimitWindow ?? 60) * 1000,
+        };
+        const modelRl = await this.rateLimitService.check(
+          `${keyData.id}:model:${model}`,
+          modelRlConfig,
+        );
+        if (!modelRl.allowed) {
+          return {
+            valid: false,
+            code: 'MODEL_RATE_LIMITED',
+            rateLimit: {
+              limit: modelRl.limit,
+              remaining: 0,
+              reset: modelRl.reset,
+            },
+          };
+        }
+      }
+
+      // Model-specific token budget
+      if (policy.tokenBudget != null && policy.tokenBudget > 0) {
+        const modelTokenKey = `keyforge:usage:tokens:${keyData.id}:${model}:${this.getCurrentMonth()}`;
+        try {
+          const modelTokensUsed = parseInt(
+            (await this.redis.get(modelTokenKey)) || '0',
+            10,
+          );
+          if (modelTokensUsed >= policy.tokenBudget) {
+            return { valid: false, code: 'MODEL_BUDGET_EXCEEDED' };
+          }
+        } catch {
+          // Fail open
+        }
+      }
+
+      // Model-specific spend cap
+      if (policy.spendCapCents != null && policy.spendCapCents > 0) {
+        const modelCostKey = `keyforge:usage:cost:${keyData.id}:${model}:${this.getCurrentMonth()}`;
+        try {
+          const modelCostCents = parseInt(
+            (await this.redis.get(modelCostKey)) || '0',
+            10,
+          );
+          if (modelCostCents >= policy.spendCapCents) {
+            return { valid: false, code: 'MODEL_SPEND_CAP_EXCEEDED' };
+          }
+        } catch {
+          // Fail open
+        }
+      }
+    }
+
     // 10. Check usage limit (remaining uses) - decrement atomically in Redis
     if (keyData.usageLimit != null) {
       const remainingKey = `keyforge:remaining:${keyData.id}`;
@@ -242,6 +309,7 @@ export class VerifyService {
       enabled: row.enabled,
       usageLimit: row.usageLimit,
       remaining: row.remaining,
+      modelPolicies: (row as any).modelPolicies ?? null,
     };
   }
 

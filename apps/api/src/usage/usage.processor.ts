@@ -62,27 +62,38 @@ export class UsageProcessor extends WorkerHost implements OnModuleDestroy {
         keyId: string;
         workspaceId: string;
         period: string;
+        model: string | null;
         verifications: number;
         successes: number;
+        tokensInput: number;
+        tokensOutput: number;
+        costCents: number;
       }
     >();
 
     for (const item of batch) {
       // Use daily period for the usage_records table
       const period = item.timestamp.slice(0, 10); // e.g. 2026-03-20
-      const groupKey = `${item.keyId}:${period}`;
+      const groupKey = `${item.keyId}:${period}:${item.model || '_'}`;
 
       const existing = grouped.get(groupKey);
       if (existing) {
         existing.verifications += 1;
         existing.successes += 1;
+        existing.tokensInput += item.tokensInput;
+        existing.tokensOutput += item.tokensOutput;
+        existing.costCents += item.costCents;
       } else {
         grouped.set(groupKey, {
           keyId: item.keyId,
           workspaceId: item.workspaceId,
           period,
+          model: item.model,
           verifications: 1,
           successes: 1,
+          tokensInput: item.tokensInput,
+          tokensOutput: item.tokensOutput,
+          costCents: item.costCents,
         });
       }
     }
@@ -97,6 +108,10 @@ export class UsageProcessor extends WorkerHost implements OnModuleDestroy {
       successes: g.successes,
       rateLimited: 0,
       usageExceeded: 0,
+      tokensInput: g.tokensInput,
+      tokensOutput: g.tokensOutput,
+      costCents: g.costCents,
+      model: g.model,
     }));
 
     if (values.length > 0) {

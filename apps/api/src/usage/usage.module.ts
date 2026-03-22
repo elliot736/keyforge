@@ -6,6 +6,9 @@ import { UsageController } from './usage.controller';
 import { UsageDashboardController } from './usage-dashboard.controller';
 import { UsageProcessor } from './usage.processor';
 import { UsageWorker } from './usage.worker';
+import { AnalyticsService } from './analytics.service';
+import { AnalyticsController } from './analytics.controller';
+import { AnalyticsDashboardController } from './analytics-dashboard.controller';
 import { WebhooksModule } from '../webhooks/webhooks.module';
 import { AuditModule } from '../audit/audit.module';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
@@ -26,8 +29,8 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
     AuditModule,
     WorkspacesModule,
   ],
-  controllers: [UsageController, UsageDashboardController],
-  providers: [UsageService, UsageProcessor, UsageWorker],
-  exports: [UsageService],
+  controllers: [UsageController, UsageDashboardController, AnalyticsController, AnalyticsDashboardController],
+  providers: [UsageService, UsageProcessor, UsageWorker, AnalyticsService],
+  exports: [UsageService, AnalyticsService],
 })
 export class UsageModule {}

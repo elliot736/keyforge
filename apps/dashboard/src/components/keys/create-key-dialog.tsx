@@ -26,7 +26,18 @@ interface CreateKeyDialogProps {
   onCreated: () => void;
 }
 
-type Step = 'basic' | 'scopes' | 'ratelimit' | 'budgets' | 'review' | 'created';
+type Step = 'basic' | 'scopes' | 'ratelimit' | 'budgets' | 'models' | 'review' | 'created';
+
+const POPULAR_MODELS = [
+  'gpt-4o',
+  'gpt-4o-mini',
+  'gpt-4-turbo',
+  'claude-sonnet-4-20250514',
+  'claude-opus-4-20250514',
+  'claude-haiku-4-5-20251001',
+  'gemini-2.0-flash',
+  'gemini-2.5-pro',
+];
 
 const COMMON_SCOPES = [
   'api.read',
@@ -59,6 +70,8 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
   const [rlWindow, setRlWindow] = React.useState('60');
   const [tokenBudget, setTokenBudget] = React.useState('');
   const [spendCap, setSpendCap] = React.useState('');
+  const [modelPolicies, setModelPolicies] = React.useState<Map<string, { tokenBudget: string; spendCap: string; rateLimit: string; blocked: boolean }>>(new Map());
+  const [newModelName, setNewModelName] = React.useState('');
 
   // Result
   const [createdKey, setCreatedKey] = React.useState<string | null>(null);
@@ -77,6 +90,8 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
     setRlWindow('60');
     setTokenBudget('');
     setSpendCap('');
+    setModelPolicies(new Map());
+    setNewModelName('');
     setCreatedKey(null);
     setCopied(false);
     setSubmitting(false);
@@ -144,6 +159,19 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
         body.spendCapCents = Math.round(parseFloat(spendCap) * 100);
       }
 
+      if (modelPolicies.size > 0) {
+        const policies: Record<string, Record<string, unknown>> = {};
+        modelPolicies.forEach((policy, model) => {
+          const p: Record<string, unknown> = {};
+          if (policy.tokenBudget) p.tokenBudget = parseInt(policy.tokenBudget, 10);
+          if (policy.spendCap) p.spendCapCents = Math.round(parseFloat(policy.spendCap) * 100);
+          if (policy.rateLimit) p.rateLimitMax = parseInt(policy.rateLimit, 10);
+          if (policy.blocked) p.blocked = true;
+          if (Object.keys(p).length > 0) policies[model] = p;
+        });
+        if (Object.keys(policies).length > 0) body.modelPolicies = policies;
+      }
+
       const res = await fetch(
         `/api/proxy/workspaces/${workspace}/keys`,
         {
@@ -175,7 +203,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
     }
   };
 
-  const steps: Step[] = ['basic', 'scopes', 'ratelimit', 'budgets', 'review'];
+  const steps: Step[] = ['basic', 'scopes', 'ratelimit', 'budgets', 'models', 'review'];
   const stepIndex = steps.indexOf(step);
 
   return (
@@ -190,6 +218,7 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
             {step === 'scopes' && 'Define what this key can access.'}
             {step === 'ratelimit' && 'Configure rate limiting (optional).'}
             {step === 'budgets' && 'Set token and spend limits (optional).'}
+            {step === 'models' && 'Configure per-model limits (optional).'}
             {step === 'review' && 'Review and create your key.'}
             {step === 'created' && 'Save your key now. It will not be shown again.'}
           </DialogDescription>
@@ -415,6 +444,135 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
           </div>
         )}
 
+        {/* Step: Model Policies */}
+        {step === 'models' && (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Set per-model limits. Different models can have different budgets and rate limits.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g., gpt-4o"
+                value={newModelName}
+                onChange={(e) => setNewModelName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const name = newModelName.trim();
+                    if (name && !modelPolicies.has(name)) {
+                      setModelPolicies((prev) => new Map(prev).set(name, { tokenBudget: '', spendCap: '', rateLimit: '', blocked: false }));
+                      setNewModelName('');
+                    }
+                  }
+                }}
+              />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const name = newModelName.trim();
+                  if (name && !modelPolicies.has(name)) {
+                    setModelPolicies((prev) => new Map(prev).set(name, { tokenBudget: '', spendCap: '', rateLimit: '', blocked: false }));
+                    setNewModelName('');
+                  }
+                }}
+              >
+                Add
+              </Button>
+            </div>
+            {POPULAR_MODELS.filter((m) => !modelPolicies.has(m)).length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {POPULAR_MODELS.filter((m) => !modelPolicies.has(m)).slice(0, 4).map((model) => (
+                  <Badge
+                    key={model}
+                    variant="outline"
+                    className="cursor-pointer text-xs hover:bg-accent"
+                    onClick={() => {
+                      setModelPolicies((prev) => new Map(prev).set(model, { tokenBudget: '', spendCap: '', rateLimit: '', blocked: false }));
+                    }}
+                  >
+                    + {model}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {modelPolicies.size > 0 && (
+              <div className="space-y-3">
+                {Array.from(modelPolicies.entries()).map(([model, policy]) => (
+                  <div key={model} className="rounded-lg border p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <code className="text-sm font-medium">{model}</code>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs text-destructive"
+                        onClick={() => {
+                          setModelPolicies((prev) => {
+                            const next = new Map(prev);
+                            next.delete(model);
+                            return next;
+                          });
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <Label className="text-xs">Token budget</Label>
+                        <Input
+                          type="number"
+                          placeholder="tokens/mo"
+                          className="h-8 text-xs"
+                          value={policy.tokenBudget}
+                          onChange={(e) => {
+                            setModelPolicies((prev) => {
+                              const next = new Map(prev);
+                              next.set(model, { ...policy, tokenBudget: e.target.value });
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Spend cap ($)</Label>
+                        <Input
+                          type="number"
+                          placeholder="$/mo"
+                          className="h-8 text-xs"
+                          value={policy.spendCap}
+                          onChange={(e) => {
+                            setModelPolicies((prev) => {
+                              const next = new Map(prev);
+                              next.set(model, { ...policy, spendCap: e.target.value });
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Rate limit (req/min)</Label>
+                        <Input
+                          type="number"
+                          placeholder="req/min"
+                          className="h-8 text-xs"
+                          value={policy.rateLimit}
+                          onChange={(e) => {
+                            setModelPolicies((prev) => {
+                              const next = new Map(prev);
+                              next.set(model, { ...policy, rateLimit: e.target.value });
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Step: Review */}
         {step === 'review' && (
           <div className="space-y-3">
@@ -456,6 +614,12 @@ export function CreateKeyDialog({ open, onOpenChange, workspace, onCreated }: Cr
                   <span className="text-muted-foreground">Spend Cap</span>
                   <span className="font-medium">
                     {spendCap ? `$${parseFloat(spendCap).toFixed(2)}/mo` : 'Unlimited'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Model Policies</span>
+                  <span className="font-medium">
+                    {modelPolicies.size > 0 ? `${modelPolicies.size} model(s)` : 'None'}
                   </span>
                 </div>
               </div>

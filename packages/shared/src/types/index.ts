@@ -72,6 +72,17 @@ export interface UsageInfo {
   tokens: number;
 }
 
+// Per-model policy for rate limits, budgets, and access control
+export interface ModelPolicy {
+  tokenBudget?: number;
+  spendCapCents?: number;
+  rateLimitMax?: number;
+  rateLimitWindow?: number; // seconds
+  blocked?: boolean;
+}
+
+export type ModelPolicies = Record<string, ModelPolicy>;
+
 // Full key object (for management, never includes raw key)
 export interface ApiKeyObject {
   id: string;
@@ -91,10 +102,35 @@ export interface ApiKeyObject {
   } | null;
   tokenBudget: number | null;
   spendCapCents: number | null;
+  modelPolicies: ModelPolicies | null;
   expiresAt: string | null;
   revokedAt: string | null;
   lastUsedAt: string | null;
   createdAt: string;
+}
+
+// Analytics response types
+export interface ModelBreakdown {
+  model: string;
+  tokensInput: number;
+  tokensOutput: number;
+  costCents: number;
+  requestCount: number;
+  costPer1kTokens: number;
+}
+
+export interface TokenTrend {
+  period: string;
+  tokensInput: number;
+  tokensOutput: number;
+}
+
+export interface CostProjection {
+  currentMonthCostCents: number;
+  projectedMonthCostCents: number;
+  dailyAverageCostCents: number;
+  daysRemaining: number;
+  daysElapsed: number;
 }
 
 // Webhook object

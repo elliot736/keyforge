@@ -91,6 +91,7 @@ export const apiKeys = pgTable(
     // Token/spend budgets (for LLM/AI APIs)
     tokenBudget: bigint('token_budget', { mode: 'number' }),
     spendCapCents: integer('spend_cap_cents'),
+    modelPolicies: jsonb('model_policies').$type<Record<string, { tokenBudget?: number; spendCapCents?: number; rateLimitMax?: number; rateLimitWindow?: number; blocked?: boolean }>>(),
 
     // Expiration & usage limits
     expiresAt: timestamp('expires_at', { withTimezone: true }),

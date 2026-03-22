@@ -7,10 +7,14 @@ import {
   Copy,
   RotateCw,
   Ban,
-  Pencil,
   Clock,
   Shield,
   Tag,
+  Check,
+  Activity,
+  Coins,
+  DollarSign,
+  Zap,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
@@ -34,6 +38,7 @@ export default function KeyDetailPage() {
   const [loading, setLoading] = React.useState(true);
   const [rotating, setRotating] = React.useState(false);
   const [newKey, setNewKey] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState<string | null>(null);
 
   const fetchKey = React.useCallback(async () => {
     try {
@@ -87,8 +92,10 @@ export default function KeyDetailPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const getStatus = (): { label: string; variant: 'success' | 'destructive' | 'warning' } => {
@@ -101,8 +108,14 @@ export default function KeyDetailPage() {
   if (loading) {
     return (
       <div>
+        <Skeleton className="mb-2 h-5 w-32" />
         <Skeleton className="mb-6 h-10 w-64" />
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-20" />
+          ))}
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-64" />
           <Skeleton className="h-64" />
         </div>
@@ -113,7 +126,10 @@ export default function KeyDetailPage() {
   if (!key) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <h2 className="text-xl font-semibold">Key not found</h2>
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+          <Tag className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <h2 className="mt-4 text-xl font-semibold">Key not found</h2>
         <p className="mt-2 text-muted-foreground">This key may have been deleted.</p>
         <Link href={`/${workspace}/keys`}>
           <Button className="mt-4" variant="outline">
@@ -126,13 +142,14 @@ export default function KeyDetailPage() {
   }
 
   const status = getStatus();
+  const totalRequests = usage.reduce((sum, d) => sum + d.requests, 0);
 
   return (
     <div>
       <div className="mb-6">
         <Link
           href={`/${workspace}/keys`}
-          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Keys
@@ -144,8 +161,16 @@ export default function KeyDetailPage() {
         description={`Key ID: ${key.id}`}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => copyToClipboard(key.id)}>
-              <Copy className="mr-2 h-4 w-4" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => copyToClipboard(key.id, 'id')}
+            >
+              {copied === 'id' ? (
+                <Check className="mr-2 h-4 w-4 text-emerald-500" />
+              ) : (
+                <Copy className="mr-2 h-4 w-4" />
+              )}
               Copy ID
             </Button>
             {!key.revokedAt && (
@@ -172,90 +197,122 @@ export default function KeyDetailPage() {
               New key generated. Copy it now - it will not be shown again.
             </p>
             <div className="flex items-center gap-2">
-              <code className="flex-1 rounded bg-background px-3 py-2 font-mono text-sm">
+              <code className="flex-1 overflow-hidden break-all rounded bg-background px-3 py-2 font-mono text-sm">
                 {newKey}
               </code>
-              <Button size="sm" onClick={() => copyToClipboard(newKey)}>
-                <Copy className="h-4 w-4" />
+              <Button size="sm" onClick={() => copyToClipboard(newKey, 'newkey')}>
+                {copied === 'newkey' ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </CardContent>
         </Card>
       )}
 
+      {/* Quick stats */}
+      <div className="mb-6 grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10">
+              <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Requests (7d)</p>
+              <p className="text-lg font-bold">{totalRequests.toLocaleString()}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10">
+              <Coins className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Token Budget</p>
+              <p className="text-lg font-bold">
+                {key.tokenBudget != null
+                  ? key.tokenBudget >= 1_000_000
+                    ? `${(key.tokenBudget / 1_000_000).toFixed(1)}M`
+                    : key.tokenBudget.toLocaleString()
+                  : '\u221E'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
+              <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Spend Cap</p>
+              <p className="text-lg font-bold">
+                {key.spendCapCents != null
+                  ? `$${(key.spendCapCents / 100).toFixed(2)}`
+                  : '\u221E'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10">
+              <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Status</p>
+              <Badge variant={status.variant} className="mt-0.5">
+                {status.label}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Key Info */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Tag className="h-4 w-4" />
               Key Information
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Name</p>
-                <p className="font-medium">{key.name || 'Unnamed'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Prefix</p>
+            <div className="grid grid-cols-2 gap-y-4">
+              <InfoField label="Name" value={key.name || 'Unnamed'} />
+              <InfoField label="Prefix">
                 <code className="rounded bg-muted px-1.5 py-0.5 text-sm">{key.prefix}</code>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Environment</p>
-                <Badge variant="secondary" className="mt-1">
-                  {key.environment}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <Badge variant={status.variant} className="mt-1">
-                  {status.label}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Created</p>
-                <p className="text-sm">{format(new Date(key.createdAt), 'MMM d, yyyy HH:mm')}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Expires</p>
-                <p className="text-sm">
-                  {key.expiresAt
-                    ? format(new Date(key.expiresAt), 'MMM d, yyyy HH:mm')
-                    : 'Never'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Last Used</p>
-                <p className="text-sm">
-                  {key.lastUsedAt
+              </InfoField>
+              <InfoField label="Environment">
+                <Badge variant="secondary" className="mt-0.5">{key.environment}</Badge>
+              </InfoField>
+              <InfoField label="Owner ID">
+                <span className="truncate font-mono text-sm">{key.ownerId || 'None'}</span>
+              </InfoField>
+              <InfoField
+                label="Created"
+                value={format(new Date(key.createdAt), 'MMM d, yyyy HH:mm')}
+              />
+              <InfoField
+                label="Expires"
+                value={key.expiresAt ? format(new Date(key.expiresAt), 'MMM d, yyyy HH:mm') : 'Never'}
+              />
+              <InfoField
+                label="Last Used"
+                value={
+                  key.lastUsedAt
                     ? formatDistanceToNow(new Date(key.lastUsedAt), { addSuffix: true })
-                    : 'Never'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Owner ID</p>
-                <p className="truncate text-sm font-mono">
-                  {key.ownerId || 'None'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Token Budget</p>
-                <p className="text-sm">
-                  {key.tokenBudget != null
-                    ? `${key.tokenBudget.toLocaleString()} tokens`
-                    : 'Unlimited'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Spend Cap</p>
-                <p className="text-sm">
-                  {key.spendCapCents != null
-                    ? `$${(key.spendCapCents / 100).toFixed(2)}`
-                    : 'Unlimited'}
-                </p>
-              </div>
+                    : 'Never'
+                }
+              />
+              <InfoField label="Usage Count" value={(key as any).usageCount?.toLocaleString() ?? '0'} />
             </div>
           </CardContent>
         </Card>
@@ -263,20 +320,22 @@ export default function KeyDetailPage() {
         {/* Scopes */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Shield className="h-4 w-4" />
               Scopes & Permissions
             </CardTitle>
           </CardHeader>
           <CardContent>
             {key.scopes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No scopes configured. This key has unrestricted access.
-              </p>
+              <div className="rounded-lg bg-muted/50 p-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No scopes configured. This key has unrestricted access.
+                </p>
+              </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {key.scopes.map((scope) => (
-                  <Badge key={scope} variant="outline">
+                  <Badge key={scope} variant="outline" className="font-mono text-xs">
                     {scope}
                   </Badge>
                 ))}
@@ -288,44 +347,92 @@ export default function KeyDetailPage() {
             <div>
               <h4 className="mb-2 text-sm font-medium">Rate Limit Configuration</h4>
               {key.rateLimitConfig ? (
-                <div className="rounded-md bg-muted p-3 text-sm">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <span className="text-muted-foreground">Algorithm: </span>
-                      <span className="font-medium">{key.rateLimitConfig.algorithm}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Limit: </span>
-                      <span className="font-medium">{key.rateLimitConfig.limit} req</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Window: </span>
-                      <span className="font-medium">{key.rateLimitConfig.window / 1000}s</span>
-                    </div>
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <InfoField label="Algorithm">
+                      <Badge variant="secondary" className="text-xs">
+                        {key.rateLimitConfig.algorithm.replace(/_/g, ' ')}
+                      </Badge>
+                    </InfoField>
+                    <InfoField
+                      label="Limit"
+                      value={`${key.rateLimitConfig.limit} req`}
+                    />
+                    <InfoField
+                      label="Window"
+                      value={`${key.rateLimitConfig.window / 1000}s`}
+                    />
                     {key.rateLimitConfig.burstLimit && (
-                      <div>
-                        <span className="text-muted-foreground">Burst: </span>
-                        <span className="font-medium">{key.rateLimitConfig.burstLimit}</span>
-                      </div>
+                      <InfoField
+                        label="Burst"
+                        value={String(key.rateLimitConfig.burstLimit)}
+                      />
                     )}
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">No rate limiting configured.</p>
+                <div className="rounded-lg bg-muted/50 p-4 text-center">
+                  <p className="text-sm text-muted-foreground">No rate limiting configured.</p>
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Model Policies */}
+      {key.modelPolicies && Object.keys(key.modelPolicies).length > 0 && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Coins className="h-4 w-4" />
+              Model Policies
+            </CardTitle>
+            <CardDescription>Per-model rate limits and budgets</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {Object.entries(key.modelPolicies).map(([model, policy]) => (
+                <div key={model} className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                  <code className="text-sm font-medium">{model}</code>
+                  <div className="flex gap-4 text-xs text-muted-foreground">
+                    {policy.tokenBudget && (
+                      <span>Budget: <span className="font-medium text-foreground">{policy.tokenBudget.toLocaleString()} tokens</span></span>
+                    )}
+                    {policy.spendCapCents && (
+                      <span>Cap: <span className="font-medium text-foreground">${(policy.spendCapCents / 100).toFixed(2)}</span></span>
+                    )}
+                    {policy.rateLimitMax && (
+                      <span>Rate: <span className="font-medium text-foreground">{policy.rateLimitMax} req/{policy.rateLimitWindow ?? 60}s</span></span>
+                    )}
+                    {policy.blocked && (
+                      <Badge variant="destructive" className="text-xs">Blocked</Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Usage Chart */}
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Usage (Last 7 days)
-          </CardTitle>
-          <CardDescription>Request volume for this key</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Clock className="h-4 w-4" />
+                Usage (Last 7 days)
+              </CardTitle>
+              <CardDescription>Request volume for this key</CardDescription>
+            </div>
+            <Link href={`/${workspace}/usage`}>
+              <Button variant="ghost" size="sm" className="text-xs">
+                Full analytics
+              </Button>
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           <UsageChart data={usage} />
@@ -336,15 +443,32 @@ export default function KeyDetailPage() {
       {key.meta && Object.keys(key.meta).length > 0 && (
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle>Metadata</CardTitle>
+            <CardTitle className="text-base">Metadata</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="overflow-auto rounded-md bg-muted p-4 text-sm">
+            <pre className="overflow-auto rounded-lg bg-muted/50 p-4 text-sm">
               {JSON.stringify(key.meta, null, 2)}
             </pre>
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function InfoField({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {children ?? <p className="mt-0.5 text-sm font-medium">{value}</p>}
     </div>
   );
 }

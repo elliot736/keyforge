@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+// ---- Model Policies (per-model rate limits, budgets, caps) ----
+export const modelPolicySchema = z.object({
+  tokenBudget: z.number().int().positive().optional(),
+  spendCapCents: z.number().int().positive().optional(),
+  rateLimitMax: z.number().int().positive().optional(),
+  rateLimitWindow: z.number().int().positive().optional(), // seconds
+  blocked: z.boolean().optional(),
+});
+
+export const modelPoliciesSchema = z.record(z.string(), modelPolicySchema).optional();
+
 // ---- Keys ----
 export const createKeySchema = z.object({
   name: z.string().min(1).max(255),
@@ -17,11 +28,13 @@ export const createKeySchema = z.object({
   }).optional(),
   tokenBudget: z.number().int().positive().optional(),
   spendCapCents: z.number().int().positive().optional(),
+  modelPolicies: modelPoliciesSchema,
   expiresAt: z.string().datetime().optional(),
 });
 
 export const verifyKeySchema = z.object({
   key: z.string().min(1),
+  model: z.string().optional(),
 });
 
 export const verifyKeyResponseSchema = z.object({
@@ -68,6 +81,7 @@ export const updateKeySchema = z.object({
   }).optional(),
   tokenBudget: z.number().int().positive().optional(),
   spendCapCents: z.number().int().positive().optional(),
+  modelPolicies: modelPoliciesSchema,
   expiresAt: z.string().datetime().nullable().optional(),
 });
 

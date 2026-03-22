@@ -39,6 +39,11 @@ export class VerifyController {
           description: 'The API key to verify',
           example: 'sk_live_abc123',
         },
+        model: {
+          type: 'string',
+          description: 'The model being used (for per-model policy enforcement)',
+          example: 'gpt-4o',
+        },
       },
     },
   })
@@ -67,6 +72,6 @@ export class VerifyController {
   async verifyKey(
     @Body(new ZodValidationPipe(verifyKeySchema)) body: VerifyKeyInput,
   ) {
-    return this.verifyService.verify(body.key);
+    return this.verifyService.verify(body.key, body.model);
   }
 }

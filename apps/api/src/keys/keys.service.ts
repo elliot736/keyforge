@@ -46,6 +46,7 @@ interface CachedKeyData {
   enabled: boolean;
   usageLimit: number | null;
   remaining: number | null;
+  modelPolicies: Record<string, { tokenBudget?: number; spendCapCents?: number; rateLimitMax?: number; rateLimitWindow?: number; blocked?: boolean }> | null;
 }
 
 @Injectable()
@@ -93,6 +94,7 @@ export class KeysService {
         rateLimitRefill: rateLimitConfig?.refillRate ?? null,
         tokenBudget: input.tokenBudget ?? null,
         spendCapCents: input.spendCapCents ?? null,
+        modelPolicies: input.modelPolicies ?? null,
         expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
         enabled: true,
         usageLimit: null,
@@ -237,6 +239,7 @@ export class KeysService {
     if (input.meta !== undefined) updateFields.metadata = input.meta;
     if (input.tokenBudget !== undefined) updateFields.tokenBudget = input.tokenBudget;
     if (input.spendCapCents !== undefined) updateFields.spendCapCents = input.spendCapCents;
+    if (input.modelPolicies !== undefined) updateFields.modelPolicies = input.modelPolicies;
     if (input.rateLimitConfig !== undefined) {
       updateFields.rateLimitMax = input.rateLimitConfig.limit;
       updateFields.rateLimitWindow = Math.floor(
@@ -559,6 +562,7 @@ export class KeysService {
       enabled: row.enabled,
       usageLimit: row.usageLimit,
       remaining: row.remaining,
+      modelPolicies: row.modelPolicies ?? null,
     };
   }
 
@@ -585,6 +589,7 @@ export class KeysService {
           : null,
       tokenBudget: row.tokenBudget ?? null,
       spendCapCents: row.spendCapCents ?? null,
+      modelPolicies: row.modelPolicies ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       revokedAt: row.revokedAt?.toISOString() ?? null,
       lastUsedAt: row.lastUsedAt?.toISOString() ?? null,
