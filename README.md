@@ -8,6 +8,8 @@
 </p>
 
 <p align="center">
+  <a href="#why-keyforge">Why KeyForge</a> &middot;
+  <a href="#features">Features</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#sdk">SDK</a> &middot;
   <a href="#api-reference">API Reference</a> &middot;
@@ -23,6 +25,8 @@
 
 ## Table of Contents
 
+- [Why KeyForge](#why-keyforge)
+- [Features](#features)
 - [Quick Start](#quick-start)
 - [How It Works](#how-it-works)
 - [SDK](#sdk)
@@ -59,10 +63,35 @@
 
 ---
 
+## Why KeyForge
+
+Every API that serves external developers needs key management. Most teams start by hashing random strings into a database table and checking them on every request. Then the requirements grow: rate limiting per key, usage tracking, spend caps, key rotation without downtime, webhook notifications, an admin dashboard for your customers. Each feature is another table, another Redis script, another background job, another page in the dashboard. By the time you have a production-ready system, you have built an entire product inside your product.
+
+KeyForge is that product, extracted and open-sourced. It handles the full API key lifecycle: creation, verification, rotation, revocation, rate limiting, token-based usage metering, spend caps, webhooks, audit logging, and billing integration. Your API calls one endpoint to verify a key. Everything else happens behind the scenes.
+
+Self-hosted, single `docker compose up`, no vendor lock-in. You own the data, you own the infrastructure, you own the keys.
+
+---
+
+## Features
+
+- **Full key lifecycle.** Create, verify, rotate, and revoke API keys. Rotation supports grace periods so old keys keep working during the transition.
+- **Three rate limiting algorithms.** Fixed window, sliding window, and token bucket. Selected per key. Enforced atomically with Redis Lua scripts on every verify call.
+- **Token budgets and spend caps.** Monthly limits on token consumption and dollar spend. Built for AI/LLM APIs where one request can cost 100x more than another.
+- **Usage metering.** Report token counts and costs per request. Query usage time series by hour, day, or month. Workspace-level summaries for billing.
+- **Embeddable React portal.** Drop `<KeyPortal />` into your app and your customers can manage their own keys. No UI to build.
+- **Webhook notifications.** Key created, revoked, expired, rotated, rate limited, quota warning, quota exceeded. HMAC-SHA256 signed. Retried with exponential backoff.
+- **Audit logging.** Every management action recorded with actor, action, resource, and metadata. Queryable and exportable.
+- **SDK with framework middleware.** One line to protect Express, Fastify, Hono, or Next.js routes. Extracts the key, verifies it, attaches the result, sets rate limit headers.
+- **Stripe billing integration.** Plans with key limits, verification quotas, and feature gates. Checkout, customer portal, and webhook handling built in.
+- **Sub-5ms verification.** SHA-256 hash lookup in Redis, atomic rate limit check, usage increment. All in a single round trip.
+
+---
+
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-username/keyforge.git
+git clone https://github.com/elliot736/keyforge.git
 cd keyforge
 cp .env.example .env
 docker compose up -d postgres redis
