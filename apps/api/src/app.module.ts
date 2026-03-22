@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { LoggerModule } from 'nestjs-pino';
 import { DatabaseModule } from './database/database.module';
 import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
@@ -25,6 +26,14 @@ import { envSchema } from './config/env.schema';
           throw new Error(`Config validation error: ${result.error.message}`);
         }
         return result.data;
+      },
+    }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.LOG_LEVEL || 'info',
+        transport: process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty', options: { colorize: true, singleLine: true } }
+          : undefined,
       },
     }),
     ScheduleModule.forRoot(),

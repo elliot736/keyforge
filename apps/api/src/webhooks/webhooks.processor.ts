@@ -6,7 +6,8 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DRIZZLE } from '../database/database.module';
 import * as schema from '../database/schema';
 import { signWebhookPayload } from '@keyforge/shared';
-import { WEBHOOK_DELIVERY_QUEUE } from './webhooks.constants';
+import { WEBHOOK_DELIVERY_QUEUE, CIRCUIT_BREAKER_THRESHOLD, CIRCUIT_BREAKER_RESET_SECONDS } from './webhooks.constants';
+import { RedisService } from '../redis/redis.service';
 
 interface WebhookDeliveryJob {
   deliveryId: string;
@@ -24,12 +25,62 @@ export class WebhooksProcessor extends WorkerHost {
 
   constructor(
     @Inject(DRIZZLE) private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly redis: RedisService,
   ) {
     super();
   }
 
+  private circuitBreakerKey(endpointId: string): string {
+    return `keyforge:webhook:cb:${endpointId}`;
+  }
+
+  private async isCircuitOpen(endpointId: string): Promise<boolean> {
+    try {
+      const failures = await this.redis.get(this.circuitBreakerKey(endpointId));
+      return failures !== null && parseInt(failures, 10) >= CIRCUIT_BREAKER_THRESHOLD;
+    } catch {
+      return false;
+    }
+  }
+
+  private async recordFailure(endpointId: string): Promise<void> {
+    try {
+      const key = this.circuitBreakerKey(endpointId);
+      const count = await this.redis.incr(key);
+      if (count === 1) {
+        await this.redis.expire(key, CIRCUIT_BREAKER_RESET_SECONDS);
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  private async resetFailures(endpointId: string): Promise<void> {
+    try {
+      await this.redis.del(this.circuitBreakerKey(endpointId));
+    } catch {
+      // Non-critical
+    }
+  }
+
   async process(job: Job<WebhookDeliveryJob>): Promise<void> {
     const { deliveryId, endpointId, url, secret, event, data, timestamp } = job.data;
+
+    // Circuit breaker: skip delivery if endpoint has too many consecutive failures
+    if (await this.isCircuitOpen(endpointId)) {
+      this.logger.warn(
+        `Circuit breaker open for endpoint ${endpointId}, skipping delivery ${deliveryId}`,
+      );
+      await this.db
+        .update(schema.webhookDeliveries)
+        .set({
+          status: 'failed',
+          completedAt: new Date(),
+          responseBody: 'Circuit breaker open: too many consecutive failures',
+        })
+        .where(eq(schema.webhookDeliveries.id, deliveryId));
+      return;
+    }
 
     // Mark as delivering
     await this.db
@@ -84,6 +135,7 @@ export class WebhooksProcessor extends WorkerHost {
           .where(eq(schema.webhookDeliveries.id, deliveryId));
 
         this.logger.log(`Webhook delivery ${deliveryId} succeeded (${response.status})`);
+        await this.resetFailures(endpointId);
       } else {
         // Non-2xx response
         await this.db
@@ -107,6 +159,7 @@ export class WebhooksProcessor extends WorkerHost {
             .where(eq(schema.webhookEndpoints.id, endpointId));
         }
 
+        await this.recordFailure(endpointId);
         throw new Error(`Webhook delivery failed with status ${response.status}`);
       }
     } catch (error) {

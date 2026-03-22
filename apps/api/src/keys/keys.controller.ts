@@ -19,6 +19,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { RootKeyGuard } from '../auth/guards/root-key.guard';
+import { Throttle, ThrottleGuard } from '../common/guards/throttle.guard';
 import { CurrentWorkspace, WorkspaceContext } from '../common/decorators/workspace.decorator';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { KeysService } from './keys.service';
@@ -39,7 +40,8 @@ import type {
 @ApiTags('keys')
 @ApiBearerAuth()
 @Controller('v1')
-@UseGuards(RootKeyGuard)
+@UseGuards(RootKeyGuard, ThrottleGuard)
+@Throttle(120, 60)
 export class KeysController {
   constructor(private readonly keysService: KeysService) {}
 

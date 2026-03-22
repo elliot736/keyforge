@@ -1,14 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    new FastifyAdapter(),
+    { bufferLogs: true },
   );
+
+  app.useLogger(app.get(Logger));
 
   app.enableCors({
     origin: process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) || ['http://localhost:3000'],
@@ -32,6 +36,5 @@ async function bootstrap() {
 
   const port = process.env.API_PORT || 4000;
   await app.listen(port, '0.0.0.0');
-  console.log(`KeyForge API running on port ${port}`);
 }
 bootstrap();
