@@ -1,0 +1,6 @@
+{
+  "framework": "nextjs",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/docs run build",
+  "outputDirectory": "apps/docs/.next"
+}
