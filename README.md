@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="https://keyforge-docs.vercel.app">Docs</a> &middot;
   <a href="#why-keyforge">Why KeyForge</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
