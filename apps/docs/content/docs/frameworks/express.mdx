@@ -1,0 +1,108 @@
+---
+title: Express.js
+description: Protect your Express.js APIs with KeyForge middleware
+---
+
+## Installation
+
+```bash
+npm install @keyforge/sdk
+```
+
+## Quick Start
+
+The Express middleware validates API keys on every request and attaches the verified key context to `req.keyforge`.
+
+```ts
+import express from 'express';
+import { KeyForge } from '@keyforge/sdk';
+import { keyforgeMiddleware } from '@keyforge/sdk/middleware/express';
+
+const app = express();
+const kf = new KeyForge({ apiUrl: '...', rootKey: '...' });
+
+app.use('/api', keyforgeMiddleware({
+  keyforge: kf,
+}));
+
+app.get('/api/completions', (req, res) => {
+  const { keyId, ownerId, scopes } = req.keyforge!;
+  // Your API logic
+});
+
+app.listen(3000);
+```
+
+Once the middleware is applied, any request to `/api/*` without a valid API key receives a `401 Unauthorized` response automatically.
+
+## Options
+
+The `keyforgeMiddleware` function accepts the following options:
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `keyforge` | `KeyForge` | **Required.** A configured KeyForge SDK instance. |
+| `extractKey` | `(req: Request) => string \| undefined` | Custom function to extract the API key from the request. Defaults to reading the `Authorization: Bearer <key>` header. |
+| `onError` | `(err: Error, req: Request, res: Response) => void` | Custom error handler. By default, returns a JSON `401` response. |
+
+### Custom Key Extraction
+
+If your clients send the key in a different header or query parameter, provide a custom `extractKey` function:
+
+```ts
+app.use('/api', keyforgeMiddleware({
+  keyforge: kf,
+  extractKey: (req) => req.headers['x-api-key'] as string,
+}));
+```
+
+### Custom Error Handling
+
+Override the default error response with `onError`:
+
+```ts
+app.use('/api', keyforgeMiddleware({
+  keyforge: kf,
+  onError: (err, req, res) => {
+    console.error('Auth failed:', err.message);
+    res.status(403).json({ error: 'Forbidden' });
+  },
+}));
+```
+
+## Rate Limit Headers
+
+When rate limiting is configured on a key, the middleware automatically sets standard rate limit headers on every response:
+
+| Header | Description |
+| --- | --- |
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window. |
+| `X-RateLimit-Remaining` | Requests remaining in the current window. |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets. |
+| `Retry-After` | Seconds until the client can retry. Only present on `429` responses. |
+
+When a key exceeds its rate limit, the middleware returns a `429 Too Many Requests` response with a `Retry-After` header.
+
+## TypeScript
+
+The middleware extends the Express `Request` type. To get type safety, ensure your `tsconfig.json` includes the SDK types:
+
+```ts
+declare global {
+  namespace Express {
+    interface Request {
+      keyforge?: {
+        keyId: string;
+        ownerId: string;
+        scopes: string[];
+        meta: Record<string, unknown>;
+        rateLimit?: {
+          limit: number;
+          remaining: number;
+          reset: number;
+        };
+      };
+    }
+  }
+}
+```

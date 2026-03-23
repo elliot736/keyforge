@@ -1,0 +1,108 @@
+---
+title: Rate Limiting
+description: Control request throughput with configurable rate limiting algorithms
+---
+
+KeyForge supports three rate limiting algorithms, each suited to different workloads. Rate limits are enforced per key and configured when creating or updating a key.
+
+## Algorithms
+
+### Fixed Window
+
+A simple counter that resets at the start of each time window.
+
+```ts
+rateLimitConfig: { algorithm: 'fixed_window', limit: 100, window: 60000 }
+```
+
+- **How it works**: Divides time into fixed intervals (e.g., every 60 seconds). A counter increments with each request and resets to zero when the window expires.
+- **Pros**: Low memory usage. Simple to reason about.
+- **Cons**: Susceptible to burst traffic at window boundaries. A client could send 100 requests at the end of one window and 100 at the start of the next, effectively doubling throughput in a short period.
+
+### Sliding Window
+
+A weighted average of the current and previous window, providing smoother rate enforcement.
+
+```ts
+rateLimitConfig: { algorithm: 'sliding_window', limit: 100, window: 60000 }
+```
+
+- **How it works**: Combines the count from the previous window (weighted by the fraction of time elapsed) with the count from the current window. This smooths out the boundary spike problem of fixed windows.
+- **Pros**: Even distribution of allowed requests over time. Eliminates boundary bursts.
+- **Cons**: Slightly more memory than fixed window (stores two counters).
+
+### Token Bucket
+
+Tokens accumulate at a constant rate and are consumed by each request, allowing controlled bursts.
+
+```ts
+rateLimitConfig: { algorithm: 'token_bucket', limit: 100, refillRate: 10 }
+```
+
+- **How it works**: A bucket holds up to `limit` tokens. Tokens are added at `refillRate` per second. Each request consumes one token. If the bucket is empty, the request is rejected.
+- **Pros**: Allows legitimate bursts up to the bucket size while enforcing a sustained average rate.
+- **Cons**: More complex to configure. Requires tuning both `limit` (burst size) and `refillRate` (sustained rate).
+
+## Choosing an Algorithm
+
+| Use case | Recommended algorithm |
+| --- | --- |
+| Simple API protection | Fixed window |
+| Smooth, predictable throttling | Sliding window |
+| APIs that need burst tolerance | Token bucket |
+
+## Configuration Examples
+
+### Creating a Key with Rate Limits
+
+```ts
+const { key } = await kf.keys.create({
+  name: 'Production Key',
+  ownerId: 'user_123',
+  rateLimitConfig: {
+    algorithm: 'sliding_window',
+    limit: 100,
+    window: 60000, // 1 minute
+  },
+});
+```
+
+### Updating Rate Limits
+
+```ts
+await kf.keys.update('key_abc', {
+  rateLimitConfig: {
+    algorithm: 'token_bucket',
+    limit: 200,
+    refillRate: 20,
+  },
+});
+```
+
+## Response Headers
+
+Every response includes rate limit headers so clients can self-throttle:
+
+| Header | Description |
+| --- | --- |
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window. |
+| `X-RateLimit-Remaining` | Requests remaining before throttling. |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets or tokens refill. |
+| `Retry-After` | Seconds until the client can retry. Only present on `429` responses. |
+
+## How Enforcement Works
+
+Rate limits are enforced atomically using Lua scripts executed inside Redis. This guarantees that concurrent requests against the same key are counted correctly without race conditions, even under high throughput.
+
+The flow for each request:
+
+1. The middleware calls `keys.verify()` with the API key.
+2. KeyForge checks the key's rate limit configuration and runs the corresponding Lua script in Redis.
+3. If the request is within limits, it proceeds and the updated counters are returned.
+4. If the limit is exceeded, KeyForge returns a `429` status with a `Retry-After` header.
+
+Because the check-and-increment happens in a single atomic Redis operation, there is no window for two concurrent requests to both read the same counter value and both pass through.
+
+## Webhooks
+
+When a key is rate limited, KeyForge emits a `key.rate_limited` webhook event. You can use this to monitor abuse patterns or alert on unusual traffic. See the [Webhooks](/docs/features/webhooks) guide for details.

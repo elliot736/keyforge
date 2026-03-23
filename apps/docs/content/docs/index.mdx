@@ -1,0 +1,37 @@
+---
+title: Introduction
+description: Self-hosted API key management built for AI companies
+---
+
+# KeyForge
+
+KeyForge is a self-hosted API key management platform built for AI companies. It gives you everything you need to issue, verify, and govern API keys for your customers — with sub-5ms verification, per-model rate limits, token budgets, spend caps, and a full analytics dashboard.
+
+## Why KeyForge?
+
+Every AI SaaS hits the same inflection point: you need to let customers manage their own API keys. That means building key issuance, verification, rate limiting, usage tracking, billing integration, and a customer-facing portal. Most teams bolt this together with middleware, cron jobs, and duct tape.
+
+KeyForge is the infrastructure layer so you don't have to build it yourself. Deploy it alongside your app, point your SDK at it, and get production-grade key management in minutes — not months.
+
+## Feature Highlights
+
+- **Sub-5ms key verification** — Redis-cached lookups with Postgres fallback. Your latency budget stays intact.
+- **3 rate-limiting algorithms** — Fixed window, sliding window, and token bucket. All enforced via atomic Lua scripts in Redis.
+- **Per-model policies** — Set independent token budgets, spend caps, and rate limits for each model behind your API.
+- **Token budgets and spend caps** — Hard limits on how many tokens a key can consume or how much it can spend.
+- **Webhook alerts** — Get notified when keys hit budget thresholds, get revoked, or expire. Delivered async via BullMQ.
+- **Audit logging** — Every key operation is logged with full context for compliance and debugging.
+- **Embeddable React portal** — Drop a pre-built key management UI into your app so customers can self-serve.
+- **Stripe billing integration** — Tie key usage directly to metered billing.
+- **TypeScript SDK** — Fully typed client for key management, verification, usage reporting, and analytics.
+
+![Dashboard Walkthrough](/keyforge-dashboard-walkthrough.gif)
+
+## Quick Links
+
+<Cards>
+  <Card title="Quickstart" href="/docs/quickstart" description="Go from zero to verifying keys in 2 minutes" />
+  <Card title="How It Works" href="/docs/how-it-works" description="Architecture overview and design decisions" />
+  <Card title="SDK Reference" href="/docs/sdk/installation" description="Install and configure the TypeScript SDK" />
+  <Card title="Model Policies" href="/docs/features/model-policies" description="Per-model rate limits, budgets, and access control" />
+</Cards>

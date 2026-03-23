@@ -1,0 +1,102 @@
+---
+title: Railway
+description: Deploy KeyForge on Railway with one click
+---
+
+Deploy KeyForge on [Railway](https://railway.app) with managed Postgres and Redis.
+
+<Steps>
+
+<Step>
+### Create a new project
+
+Go to [railway.app/new](https://railway.app/new) and create a new project from a GitHub repo. Connect your fork of KeyForge.
+</Step>
+
+<Step>
+### Add Postgres
+
+Click **+ New** in your project canvas and select **Database > PostgreSQL**. Railway provisions a managed Postgres 16 instance automatically.
+
+Copy the `DATABASE_URL` from the Postgres service's **Variables** tab.
+</Step>
+
+<Step>
+### Add Redis
+
+Click **+ New** again and select **Database > Redis**. Copy the `REDIS_URL` from the Redis service's **Variables** tab.
+</Step>
+
+<Step>
+### Deploy the API
+
+Click **+ New > GitHub Repo** and select your KeyForge fork. Configure the service:
+
+| Setting | Value |
+|---------|-------|
+| Root Directory | `apps/api` |
+| Build Command | `pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/api run build` |
+| Start Command | `node dist/main.js` |
+
+Add these environment variables:
+
+```bash
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+REDIS_URL=${{Redis.REDIS_URL}}
+BETTER_AUTH_SECRET=generate-a-random-32-char-string
+BETTER_AUTH_URL=https://your-api.up.railway.app
+API_PORT=4000
+NODE_ENV=production
+```
+
+<Callout type="info" title="Reference variables">
+Railway supports `${{ServiceName.VARIABLE}}` syntax to reference variables from other services in your project.
+</Callout>
+</Step>
+
+<Step>
+### Deploy the Dashboard
+
+Add another service from the same repo:
+
+| Setting | Value |
+|---------|-------|
+| Root Directory | `apps/dashboard` |
+| Build Command | `pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/dashboard run build` |
+| Start Command | `pnpm --filter @keyforge/dashboard run start` |
+
+Add environment variables:
+
+```bash
+API_URL=https://your-api.up.railway.app
+NEXT_PUBLIC_API_URL=https://your-api.up.railway.app
+```
+</Step>
+
+<Step>
+### Run database migrations
+
+Open the API service's **Shell** tab and run:
+
+```bash
+npx drizzle-kit migrate
+```
+</Step>
+
+</Steps>
+
+## Custom domain
+
+In each service's **Settings > Networking**, add a custom domain. Railway handles TLS automatically.
+
+## Estimated cost
+
+| Service | Estimated Monthly Cost |
+|---------|----------------------|
+| API (0.5 vCPU, 512MB) | ~$5 |
+| Dashboard (0.5 vCPU, 512MB) | ~$5 |
+| Postgres (1GB) | ~$5 |
+| Redis (25MB) | ~$3 |
+| **Total** | **~$18/mo** |
+
+Railway's usage-based pricing means you only pay for what you use.

@@ -1,0 +1,156 @@
+---
+title: Webhooks
+description: Receive real-time notifications for key lifecycle and usage events
+---
+
+Webhooks let you react to KeyForge events in real time. When an event occurs, KeyForge sends an HTTP POST request to your configured endpoint with a signed JSON payload.
+
+## Events
+
+| Event | Description |
+| --- | --- |
+| `key.created` | A new API key was created. |
+| `key.revoked` | A key was manually revoked. |
+| `key.expired` | A key reached its expiration date. |
+| `key.rotated` | A key was rotated (old key invalidated, new key issued). |
+| `key.rate_limited` | A request was rejected due to rate limiting. |
+| `quota.warning` | A key reached 80% or 90% of its token budget or spend cap. |
+| `quota.exceeded` | A key exhausted its token budget or spend cap. |
+| `usage.report` | Periodic usage summary for a key. |
+
+## Registering a Webhook
+
+```ts
+const webhook = await kf.webhooks.create({
+  url: 'https://your-app.com/webhooks/keyforge',
+  events: ['key.created', 'key.revoked', 'quota.warning', 'quota.exceeded'],
+  secret: 'whsec_your_signing_secret',
+});
+```
+
+You can subscribe to all events with `events: ['*']`.
+
+## Payload Format
+
+Every webhook delivery has the following structure:
+
+```json
+{
+  "id": "evt_abc123",
+  "type": "key.revoked",
+  "timestamp": "2026-03-23T12:00:00Z",
+  "data": {
+    "keyId": "key_xyz",
+    "ownerId": "user_123",
+    "reason": "manual"
+  }
+}
+```
+
+## Signature Verification
+
+Every webhook request includes an `X-KeyForge-Signature` header containing an HMAC-SHA256 signature of the raw request body, computed using your webhook secret. Always verify this signature before processing the payload.
+
+### Verification Example
+
+```ts
+import crypto from 'crypto';
+
+function verifyWebhookSignature(
+  body: string,
+  signature: string,
+  secret: string,
+): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(body)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected),
+  );
+}
+
+// In your webhook handler
+app.post('/webhooks/keyforge', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-keyforge-signature'] as string;
+  const body = req.body.toString();
+
+  if (!verifyWebhookSignature(body, signature, process.env.WEBHOOK_SECRET!)) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  const event = JSON.parse(body);
+  // Process the event
+  res.status(200).send('OK');
+});
+```
+
+### Using the SDK Helper
+
+The SDK provides a built-in verification method:
+
+```ts
+const isValid = kf.webhooks.verify({
+  body: rawBody,
+  signature: req.headers['x-keyforge-signature'],
+  secret: 'whsec_your_signing_secret',
+});
+```
+
+## Retry Policy
+
+If your endpoint returns a non-2xx status code or times out (30 second limit), KeyForge retries the delivery with exponential backoff:
+
+| Attempt | Delay |
+| --- | --- |
+| 1 | Immediate |
+| 2 | 10 seconds |
+| 3 | 1 minute |
+| 4 | 10 minutes |
+| 5 | 1 hour |
+
+After 5 failed attempts, the delivery is marked as failed and no further retries are made for that event.
+
+## Circuit Breaker
+
+If your endpoint fails 10 consecutive deliveries (across any events), KeyForge activates a circuit breaker and temporarily pauses all deliveries to that endpoint. A test delivery is sent every 5 minutes. Once a test succeeds, normal delivery resumes.
+
+## Endpoint Auto-Disable
+
+If the circuit breaker remains open for 72 hours with no successful delivery, the webhook endpoint is automatically disabled. You will receive an email notification and can re-enable the endpoint from the dashboard or via the API:
+
+```ts
+await kf.webhooks.enable('wh_abc123');
+```
+
+## Managing Webhooks
+
+### List Webhooks
+
+```ts
+const webhooks = await kf.webhooks.list();
+```
+
+### Update Events
+
+```ts
+await kf.webhooks.update('wh_abc123', {
+  events: ['key.created', 'key.revoked', 'key.expired'],
+});
+```
+
+### Delete a Webhook
+
+```ts
+await kf.webhooks.delete('wh_abc123');
+```
+
+### Replay a Delivery
+
+If you missed an event, you can replay it:
+
+```ts
+await kf.webhooks.replay('evt_abc123');
+```

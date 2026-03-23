@@ -1,0 +1,123 @@
+---
+title: Hono
+description: Protect your Hono APIs with KeyForge middleware
+---
+
+## Installation
+
+```bash
+npm install @keyforge/sdk
+```
+
+## Quick Start
+
+The Hono middleware validates API keys and stores the verified context in Hono's context store, accessible via `c.get('keyforge')`.
+
+```ts
+import { Hono } from 'hono';
+import { KeyForge } from '@keyforge/sdk';
+import { keyforgeMiddleware } from '@keyforge/sdk/middleware/hono';
+
+const app = new Hono();
+const kf = new KeyForge({ apiUrl: '...', rootKey: '...' });
+
+app.use('/api/*', keyforgeMiddleware({ keyforge: kf }));
+
+app.get('/api/completions', (c) => {
+  const result = c.get('keyforge');
+  return c.json({ owner: result.ownerId });
+});
+
+export default app;
+```
+
+This works across all Hono runtimes including Cloudflare Workers, Deno, Bun, and Node.js.
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `keyforge` | `KeyForge` | **Required.** A configured KeyForge SDK instance. |
+| `extractKey` | `(c: Context) => string \| undefined` | Custom key extraction. Defaults to `Authorization: Bearer <key>`. |
+| `onError` | `(c: Context, error: Error) => Response` | Custom error handler. Defaults to a `401` JSON response. |
+
+### Custom Key Extraction
+
+```ts
+app.use('/api/*', keyforgeMiddleware({
+  keyforge: kf,
+  extractKey: (c) => c.req.header('X-API-Key'),
+}));
+```
+
+### Custom Error Handling
+
+```ts
+app.use('/api/*', keyforgeMiddleware({
+  keyforge: kf,
+  onError: (c, error) => {
+    return c.json({ error: 'Access denied' }, 403);
+  },
+}));
+```
+
+## Context Object
+
+The `keyforge` context object contains the verified key information:
+
+```ts
+app.get('/api/resource', (c) => {
+  const {
+    keyId,       // Unique key identifier
+    ownerId,     // Owner of the key
+    scopes,      // Granted scopes
+    meta,        // Custom metadata
+    rateLimit,   // Rate limit state (if configured)
+  } = c.get('keyforge');
+
+  if (rateLimit) {
+    console.log(`${rateLimit.remaining}/${rateLimit.limit} requests left`);
+  }
+
+  return c.json({ keyId, ownerId });
+});
+```
+
+## Rate Limit Headers
+
+Rate limit headers are set automatically on every response when rate limiting is configured:
+
+| Header | Description |
+| --- | --- |
+| `X-RateLimit-Limit` | Maximum requests allowed in the current window. |
+| `X-RateLimit-Remaining` | Requests remaining in the current window. |
+| `X-RateLimit-Reset` | Unix timestamp when the window resets. |
+| `Retry-After` | Seconds to wait. Present only on `429` responses. |
+
+## TypeScript
+
+For full type safety, augment Hono's context types:
+
+```ts
+import type { Context } from 'hono';
+
+type KeyForgeEnv = {
+  Variables: {
+    keyforge: {
+      keyId: string;
+      ownerId: string;
+      scopes: string[];
+      meta: Record<string, unknown>;
+      rateLimit?: {
+        limit: number;
+        remaining: number;
+        reset: number;
+      };
+    };
+  };
+};
+
+const app = new Hono<KeyForgeEnv>();
+```
+
+With this type parameter, `c.get('keyforge')` is fully typed without a cast.

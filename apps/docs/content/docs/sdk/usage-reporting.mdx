@@ -1,0 +1,72 @@
+---
+title: Usage Reporting
+description: Report token usage and costs to enforce budgets and power analytics
+---
+
+# Usage Reporting
+
+After processing an LLM request, report the token usage and cost back to KeyForge. This data feeds into token budgets, spend caps, model-level policies, and the analytics dashboard.
+
+## Report Usage
+
+```ts
+await kf.usage.report({
+  keyId: 'key_xxxxxxxx',
+  tokens: { input: 150, output: 380 },
+  model: 'gpt-4o',
+  cost: 0.0053, // cost in dollars
+});
+```
+
+Call this after every LLM request. The operation is fast — counters are incremented atomically in Redis and flushed to Postgres by background workers.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `keyId` | `string` | yes | The key that made the request. |
+| `tokens.input` | `number` | yes | Number of input (prompt) tokens. |
+| `tokens.output` | `number` | yes | Number of output (completion) tokens. |
+| `model` | `string` | yes | The model used for the request. |
+| `cost` | `number` | no | Cost in dollars. If omitted, KeyForge will not track spend for this request. |
+
+## Get Usage for a Key
+
+Retrieve cumulative usage for a specific key:
+
+```ts
+const usage = await kf.usage.get({ keyId: 'key_xxxxxxxx' });
+
+console.log(usage.totalTokensInput);  // 1250000
+console.log(usage.totalTokensOutput); // 890000
+console.log(usage.totalCostCents);    // 4320
+console.log(usage.tokenBudget);       // 5000000
+console.log(usage.spendCapCents);     // 10000
+```
+
+## Usage Summary
+
+Get an aggregated usage summary across all keys, optionally filtered by time range or model:
+
+```ts
+const summary = await kf.usage.summary({
+  from: '2026-03-01T00:00:00Z',
+  to: '2026-03-31T23:59:59Z',
+  model: 'gpt-4o',
+});
+
+console.log(summary.totalTokensInput);  // 45000000
+console.log(summary.totalTokensOutput); // 32000000
+console.log(summary.totalCostCents);    // 128500
+console.log(summary.requestCount);      // 15230
+```
+
+## How Budgets Are Enforced
+
+When you report usage, KeyForge updates the running totals for the key. On the next `keys.verify()` call, these totals are checked against the key's configured limits:
+
+- **Token budget** — If `tokensUsed >= tokenBudget`, verification returns `BUDGET_EXCEEDED`.
+- **Spend cap** — If `spendCents >= spendCapCents`, verification returns `SPEND_CAP_EXCEEDED`.
+- **Model-level budgets** — If the key has model-specific policies, the same checks apply per model, returning `MODEL_BUDGET_EXCEEDED`.
+
+Because counters are flushed from Redis to Postgres asynchronously, there is a small window where a key could slightly exceed its budget. For most use cases this is acceptable — if you need strict enforcement, set your budgets with a small margin.

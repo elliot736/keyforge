@@ -1,0 +1,71 @@
+---
+title: Installation
+description: Install and configure the KeyForge TypeScript SDK
+---
+
+# Installation
+
+## Install the Package
+
+```bash
+npm install @keyforge/sdk
+# or
+pnpm add @keyforge/sdk
+# or
+yarn add @keyforge/sdk
+```
+
+## Configure the Client
+
+```ts
+import { KeyForge } from '@keyforge/sdk';
+
+const kf = new KeyForge({
+  apiUrl: 'https://your-keyforge-instance.com',
+  rootKey: process.env.KEYFORGE_ROOT_KEY!,
+  timeout: 10000,
+  retry: { attempts: 2, delay: 200 },
+});
+```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiUrl` | `string` | required | Base URL of your KeyForge API server. |
+| `rootKey` | `string` | required | Root key for authenticating management operations. |
+| `timeout` | `number` | `10000` | Request timeout in milliseconds. |
+| `retry.attempts` | `number` | `0` | Number of retry attempts on transient failures. |
+| `retry.delay` | `number` | `200` | Base delay between retries in milliseconds. Uses exponential backoff. |
+
+## Error Handling
+
+All SDK methods throw `KeyForgeError` on failure. Each error includes a machine-readable `code` and a human-readable `message`.
+
+```ts
+import { KeyForge, KeyForgeError } from '@keyforge/sdk';
+
+try {
+  const { key } = await kf.keys.create({ name: 'Test Key' });
+} catch (err) {
+  if (err instanceof KeyForgeError) {
+    console.error(err.code);    // e.g. "UNAUTHORIZED", "VALIDATION_ERROR"
+    console.error(err.message); // Human-readable description
+    console.error(err.status);  // HTTP status code
+  }
+}
+```
+
+## Usage Without a Root Key
+
+The `verify` method does not require a root key. If you only need to verify keys (for example, in an API gateway), you can omit the `rootKey` option:
+
+```ts
+const verifier = new KeyForge({
+  apiUrl: 'https://your-keyforge-instance.com',
+});
+
+const result = await verifier.keys.verify({ key: 'kf_live_...' });
+```
+
+This is safe because the verify endpoint is public by design — the API key itself is the credential.

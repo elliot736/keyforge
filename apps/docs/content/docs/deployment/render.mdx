@@ -1,0 +1,114 @@
+---
+title: Render
+description: Deploy KeyForge on Render with managed infrastructure
+---
+
+Deploy KeyForge on [Render](https://render.com) using their managed Postgres, Redis, and web services.
+
+<Steps>
+
+<Step>
+### Create Postgres
+
+Go to **Dashboard > New > PostgreSQL**. Choose:
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-db` |
+| Version | PostgreSQL 16 |
+| Plan | Starter ($7/mo) or higher |
+
+Copy the **Internal Database URL** after creation.
+</Step>
+
+<Step>
+### Create Redis
+
+Go to **New > Redis**. Choose:
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-redis` |
+| Plan | Starter ($10/mo) or higher |
+| Maxmemory Policy | `allkeys-lru` |
+
+Copy the **Internal Redis URL** after creation.
+</Step>
+
+<Step>
+### Deploy the API
+
+Go to **New > Web Service**. Connect your GitHub repo.
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-api` |
+| Root Directory | `apps/api` |
+| Runtime | Node |
+| Build Command | `cd ../.. && pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/api run build` |
+| Start Command | `node dist/main.js` |
+| Plan | Starter ($7/mo) |
+
+Add environment variables:
+
+```bash
+DATABASE_URL=<internal-postgres-url>
+REDIS_URL=<internal-redis-url>
+BETTER_AUTH_SECRET=generate-a-random-32-char-string
+BETTER_AUTH_URL=https://keyforge-api.onrender.com
+API_PORT=4000
+NODE_ENV=production
+```
+</Step>
+
+<Step>
+### Deploy the Dashboard
+
+Go to **New > Web Service** again:
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-dashboard` |
+| Root Directory | `apps/dashboard` |
+| Build Command | `cd ../.. && pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/dashboard run build` |
+| Start Command | `pnpm --filter @keyforge/dashboard run start` |
+
+Add environment variables:
+
+```bash
+API_URL=https://keyforge-api.onrender.com
+NEXT_PUBLIC_API_URL=https://keyforge-api.onrender.com
+```
+</Step>
+
+<Step>
+### Initialize the database
+
+Open the API service's **Shell** and run:
+
+```bash
+npx drizzle-kit migrate
+```
+</Step>
+
+</Steps>
+
+## Health check
+
+Configure the health check path in the API service settings:
+
+```
+/health
+```
+
+Render will automatically restart the service if the health check fails.
+
+## Estimated cost
+
+| Service | Monthly Cost |
+|---------|-------------|
+| API (Starter) | $7 |
+| Dashboard (Starter) | $7 |
+| Postgres (Starter) | $7 |
+| Redis (Starter) | $10 |
+| **Total** | **~$31/mo** |

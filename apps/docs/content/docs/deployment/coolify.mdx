@@ -1,0 +1,100 @@
+---
+title: Coolify
+description: Deploy KeyForge with Coolify on your own server
+---
+
+Deploy KeyForge using [Coolify](https://coolify.io), a self-hosted alternative to Heroku/Vercel that runs on your own VPS.
+
+## Prerequisites
+
+- A VPS (Hetzner, DigitalOcean, etc.) with Coolify installed
+- Your KeyForge repo on GitHub/GitLab
+
+<Steps>
+
+<Step>
+### Add a new project
+
+In the Coolify dashboard, create a new project and environment (e.g., `keyforge / production`).
+</Step>
+
+<Step>
+### Deploy Postgres
+
+Click **+ New Resource > Database > PostgreSQL 16**.
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-db` |
+| Default Database | `keyforge` |
+| Username | `keyforge` |
+
+Coolify generates a password and connection URL automatically. Copy the internal URL.
+</Step>
+
+<Step>
+### Deploy Redis
+
+Click **+ New Resource > Database > Redis 7**.
+
+| Setting | Value |
+|---------|-------|
+| Name | `keyforge-redis` |
+| Max Memory Policy | `allkeys-lru` |
+
+Copy the internal Redis URL.
+</Step>
+
+<Step>
+### Deploy the API
+
+Click **+ New Resource > Application > Docker Compose**.
+
+Point it to your GitHub repo. Set the **Docker Compose File** to `docker-compose.yml`, or use a custom one:
+
+```yaml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      NODE_ENV: production
+      API_PORT: "4000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+Set the environment variables in Coolify's **Environment Variables** section.
+</Step>
+
+<Step>
+### Deploy the Dashboard
+
+Add another application resource for the dashboard using `docker/Dockerfile.dashboard`. Set the `API_URL` environment variable to point to the API service.
+</Step>
+
+<Step>
+### Configure domains
+
+In each service's **Settings**, configure your custom domain. Coolify handles Let's Encrypt TLS certificates automatically.
+</Step>
+
+</Steps>
+
+## Automatic deployments
+
+Coolify supports webhook-triggered deploys from GitHub. Enable it in **Settings > Webhooks** to auto-deploy on push to main.
+
+<Callout type="info" title="Recommended VPS specs">
+For a small deployment, a 2 vCPU / 4GB RAM VPS (e.g., Hetzner CX22 at ~$6/mo) can run the entire KeyForge stack including Postgres and Redis.
+</Callout>

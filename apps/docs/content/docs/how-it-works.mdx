@@ -1,0 +1,81 @@
+---
+title: How It Works
+description: Architecture overview of KeyForge's key management and verification system
+---
+
+# How It Works
+
+KeyForge is designed around one core principle: key verification must be fast and reliable. Everything else — management, analytics, webhooks — is built to support that without compromising verification latency.
+
+## Architecture
+
+![KeyForge Architecture](/architecture.png)
+
+## Two Types of Keys
+
+KeyForge uses two distinct key types:
+
+- **Root keys** (`rk_...`) — Used to authenticate management operations: creating keys, updating policies, viewing analytics. These are secrets that live in your backend. They are sent via the `Authorization` header.
+- **API keys** (`sk_...`) — Issued to your customers. Used only for verification. Your customers send these when calling your API, and you forward them to KeyForge's verify endpoint.
+
+## Integration Flow
+
+![How KeyForge integrates with your API](/how-it-works.png)
+
+## Verification Is Public
+
+The `/v1/keys.verify` endpoint requires no authentication. There is no `Authorization` header, no root key, no API secret. The key itself is the credential.
+
+This is intentional. Your API gateway or middleware calls verify with the customer-provided key. If the key is valid, you allow the request. If not, you reject it. The verify response includes the key's scopes, owner, metadata, and rate limit state — everything you need to make an authorization decision.
+
+## Sub-5ms Verification
+
+![Verification Flow](/verify-flow.png)
+
+Verification follows a two-tier lookup:
+
+1. **Redis cache (hot path)** — Every key is cached in Redis with a 5-minute TTL after its first lookup. Cache hits return in under 1ms.
+2. **Postgres fallback (cold path)** — On cache miss, KeyForge reads from Postgres, caches the result, and returns. Cold lookups typically complete in 3-5ms.
+
+Key revocations and updates invalidate the Redis cache immediately, so stale reads are bounded to the window between the update and cache eviction.
+
+## Rate Limiting
+
+Rate limits are enforced during verification using atomic Lua scripts executed in Redis. Three algorithms are supported:
+
+- **Fixed window** — Simple counter that resets at fixed intervals.
+- **Sliding window** — Weighted average of the current and previous window for smoother enforcement.
+- **Token bucket** — Tokens replenish at a steady rate, allowing controlled bursts.
+
+All rate limit state lives in Redis. The verify response includes `rateLimit.remaining`, `rateLimit.limit`, and `rateLimit.reset` so your API can forward standard rate limit headers to clients.
+
+## Usage Tracking
+
+Token usage and cost data flow through a two-stage pipeline:
+
+1. **Redis counters** — When you call `usage.report()`, counters are incremented atomically in Redis. This keeps the reporting path fast and non-blocking.
+2. **Postgres flush** — Background workers periodically flush accumulated counters from Redis to Postgres for durable storage, analytics queries, and budget enforcement.
+
+This design means usage-based limits (token budgets, spend caps) are eventually consistent within a short window, while rate limits are strictly consistent.
+
+## Async Webhook Delivery
+
+Webhook events (key created, revoked, budget threshold reached, etc.) are published to a BullMQ queue backed by Redis. Dedicated worker processes consume the queue and deliver webhooks with automatic retries and exponential backoff.
+
+This keeps webhook delivery fully decoupled from the request path — a slow or failing webhook endpoint never impacts verification latency.
+
+## Dashboard
+
+The dashboard is a Next.js application that provides a management UI for workspaces, keys, analytics, and settings. It communicates with the KeyForge API server using root key authentication, proxying all management operations through the same REST API that the SDK uses.
+
+![Dashboard Walkthrough](/keyforge-dashboard-walkthrough.gif)
+
+## Key Lifecycle
+
+API keys move through a defined set of states:
+
+![Key Lifecycle](/key-lifecycle.png)
+
+## Database Schema
+
+![Database ERD](/database-erd.png)

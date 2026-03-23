@@ -1,0 +1,114 @@
+---
+title: Usage
+description: Report token usage and query consumption statistics.
+---
+
+All usage endpoints require a **Bearer token** (root key) in the `Authorization` header.
+
+---
+
+## POST /v1/usage.report
+
+Report token consumption for a key. Call this after each LLM request to track usage against budgets and spend caps.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyId` | `string` | Yes | Key that consumed the tokens |
+| `tokens` | `object` | Yes | Token counts |
+| `tokens.input` | `number` | Yes | Input tokens consumed |
+| `tokens.output` | `number` | Yes | Output tokens consumed |
+| `model` | `string` | Yes | Model identifier (e.g., `gpt-4o`) |
+| `cost` | `number` | No | Cost in cents for this request |
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/usage.report \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keyId": "key_01JQ3X...",
+    "tokens": {
+      "input": 1200,
+      "output": 450
+    },
+    "model": "gpt-4o",
+    "cost": 3.2
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
+## GET /v1/usage
+
+Retrieve time-series usage statistics.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `workspaceId` | `string` | No | Filter by workspace |
+| `keyId` | `string` | No | Filter by specific key |
+| `model` | `string` | No | Filter by model |
+| `from` | `string` | No | Start date (ISO 8601) |
+| `to` | `string` | No | End date (ISO 8601) |
+| `granularity` | `string` | No | `hour`, `day`, or `month` (default: `day`) |
+
+```bash
+curl "https://api.keyforge.dev/v1/usage?workspaceId=ws_01JQ3X...&from=2026-03-01&to=2026-03-23&granularity=day" \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "period": "2026-03-01",
+      "tokensInput": 124000,
+      "tokensOutput": 38000,
+      "costCents": 48.6,
+      "requestCount": 320
+    },
+    {
+      "period": "2026-03-02",
+      "tokensInput": 98000,
+      "tokensOutput": 31000,
+      "costCents": 39.1,
+      "requestCount": 275
+    }
+  ]
+}
+```
+
+---
+
+## GET /v1/usage/summary
+
+Get an aggregate usage summary for a workspace.
+
+```bash
+curl "https://api.keyforge.dev/v1/usage/summary?workspaceId=ws_01JQ3X..." \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "totalTokensInput": 2450000,
+  "totalTokensOutput": 812000,
+  "totalCostCents": 1023.4,
+  "totalRequests": 8420,
+  "activeKeys": 12
+}
+```

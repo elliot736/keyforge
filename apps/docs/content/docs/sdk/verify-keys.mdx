@@ -1,0 +1,104 @@
+---
+title: Verify Keys
+description: Verify API keys and enforce rate limits, budgets, and model policies
+---
+
+# Verify Keys
+
+Key verification is the core operation in KeyForge. Call it on every incoming request to check whether an API key is valid and authorized.
+
+## Basic Verification
+
+```ts
+const result = await kf.keys.verify({ key: 'kf_live_...' });
+
+if (result.valid) {
+  // Proceed with the request
+  console.log(result.keyId);   // key_xxxxxxxx
+  console.log(result.ownerId); // owner_xxxxxxxx
+  console.log(result.scopes);  // ['api.read', 'completions.create']
+} else {
+  // Reject the request
+  console.log(result.code);    // e.g. KEY_REVOKED
+}
+```
+
+## Verification with Model
+
+Pass a `model` parameter to enforce per-model rate limits, token budgets, and spend caps:
+
+```ts
+const result = await kf.keys.verify({
+  key: 'kf_live_...',
+  model: 'gpt-4o',
+});
+
+if (!result.valid && result.code === 'MODEL_RATE_LIMITED') {
+  // This key has exceeded its rate limit for gpt-4o specifically
+}
+```
+
+## Response Shape
+
+A successful verification returns:
+
+```ts
+{
+  valid: true,
+  code: 'VALID',
+  keyId: 'key_xxxxxxxx',
+  ownerId: 'owner_xxxxxxxx',
+  scopes: ['api.read', 'completions.create'],
+  meta: { team: 'backend', tier: 'pro' },
+  rateLimit: {
+    limit: 100,
+    remaining: 87,
+    reset: 1711234567890,
+  },
+  usage: {
+    tokensUsed: 45200,
+    tokenBudget: 1000000,
+    spendCents: 234,
+    spendCapCents: 5000,
+  },
+}
+```
+
+A failed verification returns:
+
+```ts
+{
+  valid: false,
+  code: 'RATE_LIMITED', // see error codes below
+}
+```
+
+## Error Codes
+
+| Code | Description |
+|------|-------------|
+| `KEY_NOT_FOUND` | The key does not exist. |
+| `KEY_REVOKED` | The key has been revoked. |
+| `KEY_EXPIRED` | The key has passed its expiration date. |
+| `RATE_LIMITED` | The key has exceeded its global rate limit. |
+| `BUDGET_EXCEEDED` | The key has exhausted its total token budget. |
+| `SPEND_CAP_EXCEEDED` | The key has reached its total spend cap. |
+| `MODEL_BLOCKED` | The key is not allowed to use the requested model. |
+| `MODEL_BUDGET_EXCEEDED` | The key has exhausted its token budget for the requested model. |
+| `MODEL_RATE_LIMITED` | The key has exceeded its rate limit for the requested model. |
+
+## Rate Limit Headers
+
+Use the `rateLimit` field from the verify response to set standard rate limit headers on your API responses:
+
+```ts
+const result = await kf.keys.verify({ key, model });
+
+if (result.valid) {
+  res.setHeader('X-RateLimit-Limit', result.rateLimit.limit);
+  res.setHeader('X-RateLimit-Remaining', result.rateLimit.remaining);
+  res.setHeader('X-RateLimit-Reset', result.rateLimit.reset);
+}
+```
+
+This gives your customers visibility into their rate limit state without any additional infrastructure.

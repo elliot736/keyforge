@@ -1,0 +1,48 @@
+---
+title: Environment Variables
+description: Complete reference for all KeyForge environment variables.
+---
+
+## Required Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | — | PostgreSQL connection string (e.g., `postgresql://user:pass@host:5432/keyforge`) |
+| `REDIS_URL` | — | Redis connection URL (e.g., `redis://localhost:6379`) |
+| `BETTER_AUTH_SECRET` | — | Secret used to sign auth tokens. Must be at least 16 characters. |
+| `BETTER_AUTH_URL` | — | Base URL for the auth service (e.g., `https://api.keyforge.dev`) |
+
+## Optional Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_PORT` | `4000` | Port the API server listens on |
+| `CORS_ORIGIN` | `http://localhost:3000` | Allowed CORS origins. Comma-separated for multiple origins. |
+| `LOG_LEVEL` | `info` | Pino log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
+| `STRIPE_SECRET_KEY` | — | Stripe secret key for billing integration |
+| `STRIPE_WEBHOOK_SECRET` | — | Stripe webhook signing secret for verifying incoming events |
+| `NODE_ENV` | `development` | Node environment (`development`, `production`, `test`) |
+
+## Example `.env` File
+
+```bash
+# Database
+DATABASE_URL=postgresql://postgres:postgres@localhost:5555/keyforge
+
+# Cache
+REDIS_URL=redis://localhost:6381
+
+# Auth
+BETTER_AUTH_SECRET=change-me-to-something-secure
+BETTER_AUTH_URL=http://localhost:4000
+
+# Server
+API_PORT=4000
+CORS_ORIGIN=http://localhost:3000
+LOG_LEVEL=info
+NODE_ENV=development
+
+# Billing (optional)
+# STRIPE_SECRET_KEY=kf_live_...
+# STRIPE_WEBHOOK_SECRET=whsec_...
+```

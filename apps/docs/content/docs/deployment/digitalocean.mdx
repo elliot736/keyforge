@@ -1,0 +1,148 @@
+---
+title: DigitalOcean
+description: Deploy KeyForge on DigitalOcean App Platform or Droplets
+---
+
+Deploy KeyForge on [DigitalOcean](https://digitalocean.com) using App Platform (managed) or a Droplet (VPS).
+
+## Option 1: App Platform
+
+The fastest way to deploy — DigitalOcean manages scaling, TLS, and networking.
+
+<Steps>
+
+<Step>
+### Create managed databases
+
+From the DigitalOcean dashboard:
+
+1. **Databases > Create Database Cluster > PostgreSQL 16** (Basic, $15/mo)
+2. **Databases > Create Database Cluster > Redis 7** (Basic, $15/mo)
+
+Copy the connection strings from each cluster's **Connection Details** panel.
+</Step>
+
+<Step>
+### Create the app
+
+Go to **App Platform > Create App** and connect your GitHub repo.
+
+Add two components:
+
+**API Component:**
+
+| Setting | Value |
+|---------|-------|
+| Source | `apps/api` |
+| Type | Web Service |
+| Build Command | `pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/api run build` |
+| Run Command | `node dist/main.js` |
+| HTTP Port | 4000 |
+| Health Check Path | `/health` |
+
+**Dashboard Component:**
+
+| Setting | Value |
+|---------|-------|
+| Source | `apps/dashboard` |
+| Type | Web Service |
+| Build Command | `pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/dashboard run build` |
+| Run Command | `pnpm --filter @keyforge/dashboard run start` |
+| HTTP Port | 3000 |
+</Step>
+
+<Step>
+### Configure environment variables
+
+In the app settings, add these environment variables to the API component:
+
+```bash
+DATABASE_URL=<postgres-connection-string>
+REDIS_URL=<redis-connection-string>
+BETTER_AUTH_SECRET=generate-a-random-32-char-string
+BETTER_AUTH_URL=https://your-app.ondigitalocean.app
+NODE_ENV=production
+API_PORT=4000
+```
+
+Add to the Dashboard component:
+
+```bash
+API_URL=https://your-app.ondigitalocean.app
+NEXT_PUBLIC_API_URL=https://your-app.ondigitalocean.app
+```
+</Step>
+
+</Steps>
+
+## Option 2: Droplet with Docker
+
+For more control, deploy on a Droplet using Docker Compose.
+
+<Steps>
+
+<Step>
+### Create a Droplet
+
+Choose a Droplet with at least 2 vCPUs and 4GB RAM. Select the **Docker** image from the Marketplace.
+
+```bash
+ssh root@your-droplet-ip
+```
+</Step>
+
+<Step>
+### Clone and configure
+
+```bash
+git clone https://github.com/elliot736/keyforge.git
+cd keyforge
+cp .env.example .env
+nano .env  # Configure DATABASE_URL, REDIS_URL, BETTER_AUTH_SECRET
+```
+</Step>
+
+<Step>
+### Start services
+
+```bash
+docker compose up -d
+```
+
+All four services (Postgres, Redis, API, Dashboard) start on the single Droplet.
+</Step>
+
+<Step>
+### Set up a reverse proxy
+
+Install Caddy for automatic HTTPS:
+
+```bash
+apt install -y caddy
+```
+
+Create `/etc/caddy/Caddyfile`:
+
+```
+api.yourdomain.com {
+    reverse_proxy localhost:4000
+}
+
+app.yourdomain.com {
+    reverse_proxy localhost:3000
+}
+```
+
+```bash
+systemctl restart caddy
+```
+</Step>
+
+</Steps>
+
+## Estimated cost
+
+| Setup | Monthly Cost |
+|-------|-------------|
+| App Platform (Basic) | ~$12 + $30 (databases) |
+| Droplet (4GB) | ~$24 (all-in-one) |

@@ -1,0 +1,111 @@
+---
+title: Analytics
+description: Model breakdowns, token trends, and cost projections.
+---
+
+All analytics endpoints require a **Bearer token** (root key) in the `Authorization` header.
+
+---
+
+## GET /v1/analytics/models
+
+Get a breakdown of usage by model.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from` | `string` | Yes | Start date (ISO 8601) |
+| `to` | `string` | Yes | End date (ISO 8601) |
+| `keyId` | `string` | No | Filter to a specific key |
+
+```bash
+curl "https://api.keyforge.dev/v1/analytics/models?from=2026-03-01&to=2026-03-23" \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "model": "gpt-4o",
+      "tokensInput": 1800000,
+      "tokensOutput": 620000,
+      "costCents": 890.4,
+      "requestCount": 5200,
+      "costPer1kTokens": 0.368
+    },
+    {
+      "model": "claude-sonnet-4-20250514",
+      "tokensInput": 650000,
+      "tokensOutput": 192000,
+      "costCents": 133.0,
+      "requestCount": 3220,
+      "costPer1kTokens": 0.158
+    }
+  ]
+}
+```
+
+---
+
+## GET /v1/analytics/tokens
+
+Get token input/output trends over time.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `from` | `string` | Yes | Start date (ISO 8601) |
+| `to` | `string` | Yes | End date (ISO 8601) |
+| `granularity` | `string` | No | `hour`, `day`, or `month` (default: `day`) |
+
+```bash
+curl "https://api.keyforge.dev/v1/analytics/tokens?from=2026-03-01&to=2026-03-23&granularity=day" \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "period": "2026-03-01",
+      "tokensInput": 124000,
+      "tokensOutput": 38000
+    },
+    {
+      "period": "2026-03-02",
+      "tokensInput": 98000,
+      "tokensOutput": 31000
+    }
+  ]
+}
+```
+
+---
+
+## GET /v1/analytics/projection
+
+Get a cost projection for the current billing month based on usage so far.
+
+```bash
+curl https://api.keyforge.dev/v1/analytics/projection \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "currentMonthCostCents": 1023.4,
+  "projectedMonthCostCents": 1420.8,
+  "dailyAverageCostCents": 44.5,
+  "daysRemaining": 8,
+  "daysElapsed": 23
+}
+```

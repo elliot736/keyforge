@@ -1,0 +1,93 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --fd-primary: 221 83% 53%;
+  --fd-ring: 221 83% 53%;
+  --fd-primary-foreground: 0 0% 100%;
+
+  --fd-color-link: #3b82f6;
+  --fd-sidebar-active: #3b82f6;
+}
+
+.dark {
+  --fd-primary: 221 83% 53%;
+  --fd-ring: 221 83% 53%;
+  --fd-primary-foreground: 0 0% 5%;
+
+  --fd-color-link: #60a5fa;
+  --fd-sidebar-active: #60a5fa;
+}
+
+:root {
+  --color-fd-primary: oklch(0.62 0.21 255);
+  --color-fd-ring: oklch(0.62 0.21 255);
+}
+
+.dark {
+  --color-fd-primary: oklch(0.70 0.18 255);
+  --color-fd-ring: oklch(0.70 0.18 255);
+}
+
+[data-active="true"] {
+  color: #3b82f6 !important;
+}
+
+.dark [data-active="true"] {
+  color: #60a5fa !important;
+}
+
+.prose a:not([class]) {
+  color: var(--kf-accent);
+  text-decoration-color: var(--kf-accent);
+}
+
+[role="tab"][data-state="active"] {
+  border-color: var(--kf-accent) !important;
+  color: var(--kf-accent) !important;
+}
+
+[data-callout] {
+  border-left-color: var(--kf-accent) !important;
+}
+
+[data-card]:hover {
+  border-color: var(--kf-accent) !important;
+}
+
+[data-step]::before {
+  background-color: var(--kf-accent) !important;
+}
+
+:root {
+  --kf-bg: #ffffff;
+  --kf-bg-subtle: #f9f9f9;
+  --kf-bg-code: #f5f5f5;
+  --kf-border: #e5e5e5;
+  --kf-border-subtle: #efefef;
+  --kf-text: #171717;
+  --kf-text-secondary: #525252;
+  --kf-text-tertiary: #a3a3a3;
+  --kf-text-muted: #d4d4d4;
+  --kf-accent: #3b82f6;
+  --kf-accent-text: #ffffff;
+  --kf-code-text: #525252;
+  --kf-dots: #e5e5e5;
+}
+
+.dark {
+  --kf-bg: #0a0a0a;
+  --kf-bg-subtle: #111111;
+  --kf-bg-code: #111111;
+  --kf-border: #1a1a1a;
+  --kf-border-subtle: rgba(255,255,255,0.04);
+  --kf-text: #ededed;
+  --kf-text-secondary: #888888;
+  --kf-text-tertiary: #555555;
+  --kf-text-muted: #333333;
+  --kf-accent: #60a5fa;
+  --kf-accent-text: #0a0a0a;
+  --kf-code-text: #999999;
+  --kf-dots: #1a1a1a;
+}

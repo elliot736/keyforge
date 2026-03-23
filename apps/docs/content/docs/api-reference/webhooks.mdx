@@ -1,0 +1,147 @@
+---
+title: Webhooks
+description: Manage webhook subscriptions and delivery history.
+---
+
+All webhook endpoints require a **Bearer token** (root key) in the `Authorization` header.
+
+---
+
+## POST /v1/webhooks
+
+Create a new webhook subscription.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | `string` | Yes | HTTPS endpoint to receive events |
+| `events` | `string[]` | Yes | Event types to subscribe to |
+
+Available event types: `key.created`, `key.revoked`, `key.expired`, `key.rotated`, `key.updated`, `usage.budget_exceeded`, `usage.spend_cap_exceeded`, `usage.rate_limited`.
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/webhooks \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/keyforge",
+    "events": ["key.revoked", "usage.budget_exceeded"]
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "id": "wh_01JQ3X...",
+  "url": "https://example.com/webhooks/keyforge",
+  "events": ["key.revoked", "usage.budget_exceeded"],
+  "active": true,
+  "signingSecret": "whsec_..."
+}
+```
+
+Store the `signingSecret` to verify incoming webhook payloads.
+
+---
+
+## GET /v1/webhooks
+
+List all webhook subscriptions.
+
+```bash
+curl https://api.keyforge.dev/v1/webhooks \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+---
+
+## GET /v1/webhooks/:id
+
+Get a single webhook by ID.
+
+```bash
+curl https://api.keyforge.dev/v1/webhooks/wh_01JQ3X... \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+---
+
+## PATCH /v1/webhooks/:id
+
+Update a webhook subscription.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `url` | `string` | Updated endpoint URL |
+| `events` | `string[]` | Updated event types |
+| `active` | `boolean` | Enable or disable the webhook |
+
+```bash
+curl -X PATCH https://api.keyforge.dev/v1/webhooks/wh_01JQ3X... \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": ["key.revoked", "key.expired", "usage.budget_exceeded"],
+    "active": true
+  }'
+```
+
+---
+
+## DELETE /v1/webhooks/:id
+
+Delete a webhook subscription.
+
+```bash
+curl -X DELETE https://api.keyforge.dev/v1/webhooks/wh_01JQ3X... \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+---
+
+## GET /v1/webhooks/:id/deliveries
+
+Get the delivery history for a webhook. Useful for debugging failed deliveries.
+
+```bash
+curl https://api.keyforge.dev/v1/webhooks/wh_01JQ3X.../deliveries \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+**Response:**
+
+```json
+{
+  "data": [
+    {
+      "deliveryId": "dlv_01JQ3X...",
+      "event": "key.revoked",
+      "status": 200,
+      "success": true,
+      "attemptedAt": "2026-03-23T10:15:00Z",
+      "duration": 124
+    },
+    {
+      "deliveryId": "dlv_01JQ4Y...",
+      "event": "usage.budget_exceeded",
+      "status": 500,
+      "success": false,
+      "attemptedAt": "2026-03-23T09:42:00Z",
+      "duration": 5002
+    }
+  ]
+}
+```
+
+---
+
+## POST /v1/webhooks/:id/deliveries/:deliveryId/retry
+
+Retry a failed webhook delivery.
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/webhooks/wh_01JQ3X.../deliveries/dlv_01JQ4Y.../retry \
+  -H "Authorization: Bearer kf_root_..."
+```

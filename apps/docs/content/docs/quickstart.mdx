@@ -1,0 +1,98 @@
+---
+title: Quickstart
+description: Go from zero to verifying API keys in 2 minutes
+---
+
+Get KeyForge running locally and verify your first API key in under 2 minutes.
+
+<Steps>
+
+<Step>
+### Start KeyForge
+
+```bash
+git clone https://github.com/elliot736/keyforge.git
+cd keyforge
+docker compose up -d
+```
+
+This starts the API server, dashboard, Redis, and Postgres.
+</Step>
+
+<Step>
+### Create a Workspace
+
+Open the dashboard at [http://localhost:3000](http://localhost:3000) and create your first workspace. A workspace is an isolated environment for managing keys — typically one per project or team.
+</Step>
+
+<Step>
+### Create a Root Key
+
+From the dashboard, navigate to **Settings > Root Keys** and generate a root key. Root keys authenticate management operations (creating, listing, and revoking API keys). Copy it somewhere safe — you won't see it again.
+
+```
+rk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+</Step>
+
+<Step>
+### Install the SDK
+
+```bash
+npm install @keyforge/sdk
+```
+</Step>
+
+<Step>
+### Create an API Key
+
+```ts
+import { KeyForge } from '@keyforge/sdk';
+
+const kf = new KeyForge({
+  apiUrl: 'http://localhost:4000',
+  rootKey: 'rk_...',
+});
+
+const { key, keyId } = await kf.keys.create({
+  name: 'My API Key',
+});
+
+console.log('API Key:', key);   // kf_live_xxxxxxxx — give this to your customer
+console.log('Key ID:', keyId);  // key_xxxxxxxx — your internal reference
+```
+
+<Callout type="warn" title="Save the key">
+The `key` value is only returned at creation time. Store or display it immediately.
+</Callout>
+</Step>
+
+<Step>
+### Verify a Key
+
+When a customer hits your API, verify their key before processing the request:
+
+```ts
+const result = await kf.keys.verify({ key: 'kf_live_...' });
+
+if (result.valid) {
+  console.log('Key owner:', result.ownerId);
+  console.log('Scopes:', result.scopes);
+} else {
+  console.log('Denied:', result.code); // e.g. KEY_REVOKED, RATE_LIMITED
+}
+```
+
+The verify endpoint is public and requires no authentication — the key itself is the credential.
+</Step>
+
+</Steps>
+
+## Next Steps
+
+<Cards>
+  <Card title="How It Works" href="/docs/how-it-works" description="Understand the architecture" />
+  <Card title="Manage Keys" href="/docs/sdk/manage-keys" description="Create keys with rate limits, budgets, and scopes" />
+  <Card title="Usage Reporting" href="/docs/sdk/usage-reporting" description="Report token usage to enforce budgets" />
+  <Card title="Model Policies" href="/docs/features/model-policies" description="Set per-model rate limits and budgets" />
+</Cards>

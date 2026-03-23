@@ -1,0 +1,60 @@
+databases:
+  - name: keyforge-db
+    plan: starter
+    databaseName: keyforge
+    user: keyforge
+    postgresMajorVersion: "16"
+
+  - name: keyforge-redis
+    plan: starter
+    type: redis
+    maxmemoryPolicy: allkeys-lru
+
+services:
+  - type: web
+    name: keyforge-api
+    plan: starter
+    runtime: node
+    rootDir: apps/api
+    buildCommand: cd ../.. && pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/api run build && pnpm --filter @keyforge/api run db:migrate
+    startCommand: node dist/main.js
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: keyforge-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: keyforge-redis
+          type: redis
+          property: connectionString
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: BETTER_AUTH_URL
+        value: https://keyforge-api.onrender.com
+      - key: API_PORT
+        value: "4000"
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+
+  - type: web
+    name: keyforge-dashboard
+    plan: starter
+    runtime: node
+    rootDir: apps/dashboard
+    buildCommand: cd ../.. && pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/dashboard run build
+    startCommand: pnpm --filter @keyforge/dashboard run start
+    envVars:
+      - key: API_URL
+        fromService:
+          name: keyforge-api
+          type: web
+          property: hostport
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: keyforge-api
+          type: web
+          property: host

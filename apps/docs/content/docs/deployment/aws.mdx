@@ -1,0 +1,100 @@
+---
+title: AWS (Terraform)
+description: Deploy KeyForge to AWS using Terraform with ECS Fargate, RDS, and ElastiCache.
+---
+
+## Prerequisites
+
+- AWS account with appropriate IAM permissions
+- Terraform 1.9+
+- AWS CLI configured
+- ACM certificate (optional, for HTTPS)
+
+## Infrastructure Overview
+
+![AWS Infrastructure](/aws-infra.png)
+
+The Terraform configuration provisions:
+
+- **VPC** with 2 public and 2 private subnets across availability zones
+- **RDS PostgreSQL 16** in private subnets with automated backups
+- **ElastiCache Redis 7.1** in private subnets for caching and rate limiting
+- **ECS Fargate** for running the API and dashboard containers
+- **Application Load Balancer** with health checks and optional TLS termination
+- **CloudWatch** for logs, metrics, and alarms
+
+## Deployment Steps
+
+### 1. Bootstrap State Bucket
+
+Create an S3 bucket for Terraform state:
+
+```bash
+aws s3 mb s3://keyforge-terraform-state --region us-east-1
+```
+
+### 2. Configure Variables
+
+Copy and edit the Terraform variables:
+
+```bash
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Key variables to set:
+
+```bash
+aws_region          = "us-east-1"
+environment         = "production"
+db_instance_class   = "db.t3.medium"
+redis_node_type     = "cache.t3.micro"
+api_cpu             = 512
+api_memory          = 1024
+api_desired_count   = 2
+acm_certificate_arn = "arn:aws:acm:..."  # optional
+better_auth_secret  = "your-secret-at-least-16-chars"
+```
+
+### 3. Plan and Apply
+
+```bash
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
+```
+
+Terraform outputs the ALB DNS name and other connection details on completion.
+
+## Auto-Scaling
+
+ECS services are configured with auto-scaling policies based on:
+
+- **CPU utilization** — scales out when average CPU exceeds 70%
+- **Request count** — scales out based on ALB request count per target
+
+Minimum and maximum task counts are configurable via `api_min_count` and `api_max_count` variables.
+
+## Monitoring
+
+CloudWatch alarms are provisioned for:
+
+- RDS CPU utilization and free storage
+- ElastiCache memory and CPU
+- ECS task health and restart counts
+- ALB 5xx error rate
+
+Alarms publish to an SNS topic. Subscribe your team's email or PagerDuty endpoint:
+
+```bash
+aws sns subscribe \
+  --topic-arn arn:aws:sns:us-east-1:123456789:keyforge-alerts \
+  --protocol email \
+  --notification-endpoint team@example.com
+```
+
+## Teardown
+
+```bash
+terraform destroy
+```

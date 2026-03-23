@@ -1,0 +1,193 @@
+---
+title: React Portal
+description: Embed a self-service API key management portal in your app
+---
+
+The `@keyforge/react` package provides pre-built React components that let your users create, view, and manage their own API keys without you building any UI.
+
+## Installation
+
+```bash
+npm install @keyforge/react
+```
+
+## Quick Start
+
+Wrap your app with `KeyForgeProvider` and render the `KeyPortal` component:
+
+```tsx
+import { KeyForgeProvider, KeyPortal } from '@keyforge/react';
+
+function App() {
+  return (
+    <KeyForgeProvider apiUrl="..." workspaceId="ws_xxx" sessionToken="...">
+      <KeyPortal />
+    </KeyForgeProvider>
+  );
+}
+```
+
+The `KeyPortal` component renders a complete key management interface including a key table, create dialog, usage charts, and status indicators.
+
+### Provider Props
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `apiUrl` | `string` | Your KeyForge API URL. |
+| `workspaceId` | `string` | The workspace to scope operations to. |
+| `sessionToken` | `string` | A session token for the current user. Generate this server-side. |
+
+## Components
+
+### KeyPortal
+
+The all-in-one component. Renders the full key management experience.
+
+```tsx
+<KeyPortal />
+```
+
+### KeyTable
+
+Displays a table of the user's API keys with status, creation date, and actions (revoke, rotate).
+
+```tsx
+<KeyTable
+  onRevoke={(keyId) => console.log('Revoked', keyId)}
+  onRotate={(keyId) => console.log('Rotated', keyId)}
+/>
+```
+
+### CreateKeyDialog
+
+A modal dialog for creating new API keys. Supports scope selection and expiration configuration.
+
+```tsx
+import { useState } from 'react';
+import { CreateKeyDialog } from '@keyforge/react';
+
+function KeyManager() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)}>Create Key</button>
+      <CreateKeyDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        onCreated={(key) => {
+          console.log('New key:', key);
+          setOpen(false);
+        }}
+        availableScopes={['read', 'write', 'admin']}
+      />
+    </>
+  );
+}
+```
+
+### UsageChart
+
+Displays a chart of token usage and spend over time for a specific key.
+
+```tsx
+<UsageChart keyId="key_abc" period="30d" />
+```
+
+### StatusBadge
+
+A small badge showing the current status of a key (active, expired, revoked, rate-limited).
+
+```tsx
+<StatusBadge status="active" />
+```
+
+## Hooks
+
+### useKeys
+
+Fetch and manage keys for the current user:
+
+```tsx
+import { useKeys } from '@keyforge/react';
+
+function KeyList() {
+  const { keys, isLoading, error, refetch } = useKeys();
+
+  if (isLoading) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <ul>
+      {keys.map((key) => (
+        <li key={key.id}>{key.name} - {key.status}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### useUsage
+
+Fetch usage data for a specific key:
+
+```tsx
+import { useUsage } from '@keyforge/react';
+
+function UsageDisplay({ keyId }: { keyId: string }) {
+  const { usage, isLoading } = useUsage(keyId, { period: '30d' });
+
+  if (isLoading) return <p>Loading...</p>;
+
+  return (
+    <div>
+      <p>Tokens used: {usage.tokensUsed.toLocaleString()}</p>
+      <p>Spend: ${(usage.spendCents / 100).toFixed(2)}</p>
+    </div>
+  );
+}
+```
+
+## Theming
+
+All components support theming through CSS variables. Override the defaults to match your application's design:
+
+```css
+:root {
+  --kf-color-primary: #6366f1;
+  --kf-color-primary-hover: #4f46e5;
+  --kf-color-background: #ffffff;
+  --kf-color-surface: #f9fafb;
+  --kf-color-border: #e5e7eb;
+  --kf-color-text: #111827;
+  --kf-color-text-secondary: #6b7280;
+  --kf-color-success: #10b981;
+  --kf-color-warning: #f59e0b;
+  --kf-color-error: #ef4444;
+  --kf-radius: 8px;
+  --kf-font-family: 'Inter', sans-serif;
+}
+```
+
+### Dark Mode
+
+Components respect the `prefers-color-scheme` media query by default. You can also force a theme:
+
+```tsx
+<KeyForgeProvider apiUrl="..." workspaceId="ws_xxx" sessionToken="..." theme="dark">
+  <KeyPortal />
+</KeyForgeProvider>
+```
+
+## Session Token
+
+The `sessionToken` authenticates the current user and scopes all operations to their keys. Generate it server-side:
+
+```ts
+const token = await kf.sessions.create({
+  ownerId: 'user_123',
+  expiresIn: '1h',
+});
+```
+
+Pass this token to your client-side code. Never expose your root key to the browser.

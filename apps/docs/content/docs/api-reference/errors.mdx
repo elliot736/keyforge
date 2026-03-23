@@ -1,0 +1,57 @@
+---
+title: Error Codes
+description: Reference for all error codes returned by the KeyForge API.
+---
+
+All error responses follow a consistent format:
+
+```json
+{
+  "code": "KEY_NOT_FOUND",
+  "message": "The requested key does not exist."
+}
+```
+
+HTTP status codes are used alongside error codes: `400` for bad requests, `401` for authentication failures, `403` for authorization failures, `404` for missing resources, and `429` for rate limits.
+
+---
+
+## Verification Errors
+
+These codes are returned in the `code` field of a failed `keys.verifyKey` response.
+
+| Code | Description |
+|------|-------------|
+| `KEY_NOT_FOUND` | The key does not exist. It may have been deleted or never created. |
+| `KEY_REVOKED` | The key has been revoked and is no longer valid. |
+| `KEY_EXPIRED` | The key has passed its `expiresAt` timestamp. |
+| `INVALID_KEY` | The key format is invalid. Check the prefix and length. |
+
+## Rate Limit Errors
+
+| Code | Description |
+|------|-------------|
+| `RATE_LIMITED` | The key has exceeded its global rate limit. Retry after the `reset` window. |
+| `MODEL_RATE_LIMITED` | The key has exceeded its rate limit for the specific model. |
+
+## Budget and Spend Errors
+
+| Code | Description |
+|------|-------------|
+| `BUDGET_EXCEEDED` | The key has exceeded its monthly token budget. |
+| `SPEND_CAP_EXCEEDED` | The key has exceeded its monthly spend cap. |
+| `MODEL_BUDGET_EXCEEDED` | The key has exceeded its per-model token budget. |
+| `MODEL_SPEND_CAP_EXCEEDED` | The key has exceeded its per-model spend cap. |
+
+## Policy Errors
+
+| Code | Description |
+|------|-------------|
+| `MODEL_BLOCKED` | The requested model is blocked by the key's model policies. |
+
+## Authorization Errors
+
+| Code | Description |
+|------|-------------|
+| `FORBIDDEN` | The root key does not have sufficient permissions for this operation. |
+| `WORKSPACE_NOT_FOUND` | The target workspace does not exist or is not accessible. |

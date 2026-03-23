@@ -133,7 +133,6 @@ export class BillingService {
       return;
     }
 
-    // Get the subscription to find the metered usage item
     const subscription = await this.stripe!.subscriptions.retrieve(
       workspace.stripeSubscriptionId,
     );
@@ -147,7 +146,6 @@ export class BillingService {
       return;
     }
 
-    // Get the workspace's total verifications for the current billing period
     const periodStart = new Date((subscription.current_period_start as number) * 1000);
     const periodStartStr = periodStart.toISOString().slice(0, 10);
 
@@ -165,7 +163,6 @@ export class BillingService {
 
     const total = usageResult?.totalVerifications ?? 0;
 
-    // Report usage to Stripe via meter events
     await this.stripe!.subscriptionItems.createUsageRecord(meteredItem.id, {
       quantity: total,
       timestamp: Math.floor(Date.now() / 1000),
@@ -173,6 +170,152 @@ export class BillingService {
     });
 
     this.logger.debug(`Synced ${total} usage units to Stripe for workspace ${workspaceId}`);
+  }
+
+  // ─── Stripe Billing Meters (token-based metering for AI) ────────────────
+
+  /**
+   * Report a meter event to Stripe Billing Meters.
+   * This is the modern Stripe approach for usage-based billing.
+   *
+   * Workspace metadata should contain:
+   *   __stripeMeterTokens: string    - Stripe Meter event name for token usage
+   *   __stripeMeterRequests: string  - Stripe Meter event name for API requests
+   *   __stripeMeterCost: string      - Stripe Meter event name for cost (in cents)
+   */
+  async reportMeterEvents(workspaceId: string): Promise<void> {
+    if (!this.enabled || !this.stripe) return;
+
+    const workspace = await this.getWorkspaceOrFail(workspaceId);
+    if (!workspace.stripeCustomerId) return;
+
+    const meta = (workspace.metadata as Record<string, unknown>) ?? {};
+    const tokensMeter = meta.__stripeMeterTokens as string | undefined;
+    const requestsMeter = meta.__stripeMeterRequests as string | undefined;
+    const costMeter = meta.__stripeMeterCost as string | undefined;
+
+    if (!tokensMeter && !requestsMeter && !costMeter) return;
+
+    // Get usage for the current period (today)
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [usage] = await this.db
+      .select({
+        totalRequests: sql<number>`coalesce(sum(${schema.usageRecords.verifications}), 0)::int`,
+        totalTokens: sql<number>`coalesce(sum(${schema.usageRecords.tokensInput}) + sum(${schema.usageRecords.tokensOutput}), 0)::int`,
+        totalCostCents: sql<number>`coalesce(sum(${schema.usageRecords.costCents}), 0)::int`,
+      })
+      .from(schema.usageRecords)
+      .where(
+        and(
+          eq(schema.usageRecords.workspaceId, workspaceId),
+          eq(schema.usageRecords.period, today),
+        ),
+      );
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const identifier = workspace.stripeCustomerId;
+    const totalTokens = usage?.totalTokens ?? 0;
+    const totalRequests = usage?.totalRequests ?? 0;
+    const totalCostCents = usage?.totalCostCents ?? 0;
+
+    try {
+      const events: Promise<unknown>[] = [];
+
+      if (tokensMeter && totalTokens > 0) {
+        events.push(
+          this.stripe.billing.meterEvents.create({
+            event_name: tokensMeter,
+            timestamp,
+            payload: {
+              value: String(totalTokens),
+              stripe_customer_id: identifier,
+            },
+          }),
+        );
+      }
+
+      if (requestsMeter && totalRequests > 0) {
+        events.push(
+          this.stripe.billing.meterEvents.create({
+            event_name: requestsMeter,
+            timestamp,
+            payload: {
+              value: String(totalRequests),
+              stripe_customer_id: identifier,
+            },
+          }),
+        );
+      }
+
+      if (costMeter && totalCostCents > 0) {
+        events.push(
+          this.stripe.billing.meterEvents.create({
+            event_name: costMeter,
+            timestamp,
+            payload: {
+              value: String(totalCostCents),
+              stripe_customer_id: identifier,
+            },
+          }),
+        );
+      }
+
+      if (events.length > 0) {
+        await Promise.all(events);
+        this.logger.debug(
+          `Reported ${events.length} meter event(s) to Stripe for workspace ${workspaceId}`,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        `Failed to report meter events for workspace ${workspaceId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // ─── Auto-sync all paying workspaces ────────────────────────────────────
+
+  async syncAllWorkspaces(): Promise<void> {
+    if (!this.enabled) return;
+
+    const workspaces = await this.db
+      .select({
+        id: schema.workspaces.id,
+        stripeCustomerId: schema.workspaces.stripeCustomerId,
+        stripeSubscriptionId: schema.workspaces.stripeSubscriptionId,
+        metadata: schema.workspaces.metadata,
+      })
+      .from(schema.workspaces)
+      .where(
+        and(
+          sql`${schema.workspaces.stripeCustomerId} IS NOT NULL`,
+          sql`${schema.workspaces.plan} != 'free'`,
+        ),
+      );
+
+    let synced = 0;
+    for (const ws of workspaces) {
+      try {
+        // Try Billing Meters first (modern approach)
+        await this.reportMeterEvents(ws.id);
+
+        // Also sync via subscription usage records (legacy approach)
+        if (ws.stripeSubscriptionId) {
+          await this.syncUsageToStripe(ws.id);
+        }
+
+        synced++;
+      } catch (err) {
+        this.logger.error(
+          `Usage sync failed for workspace ${ws.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    if (synced > 0) {
+      this.logger.log(`Auto-synced usage to Stripe for ${synced} workspace(s)`);
+    }
   }
 
   // ─── Get Subscription ─────────────────────────────────────────────────────

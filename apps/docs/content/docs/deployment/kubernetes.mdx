@@ -1,0 +1,218 @@
+---
+title: Kubernetes
+description: Deploy KeyForge on any Kubernetes cluster
+---
+
+Deploy KeyForge on Kubernetes with Helm-style manifests. Works on any cluster — EKS, GKE, AKS, k3s, or self-managed.
+
+## Prerequisites
+
+- Kubernetes cluster (1.25+)
+- `kubectl` configured
+- PostgreSQL 16 and Redis 7 accessible from the cluster (managed or in-cluster)
+
+## Namespace
+
+```bash
+kubectl create namespace keyforge
+```
+
+## Secrets
+
+```bash
+kubectl create secret generic keyforge-secrets \
+  --namespace keyforge \
+  --from-literal=DATABASE_URL="postgresql://user:pass@postgres:5432/keyforge" \
+  --from-literal=REDIS_URL="redis://redis:6379" \
+  --from-literal=BETTER_AUTH_SECRET="your-secret-at-least-16-chars" \
+  --from-literal=BETTER_AUTH_URL="https://api.yourdomain.com"
+```
+
+## API Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keyforge-api
+  namespace: keyforge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: keyforge-api
+  template:
+    metadata:
+      labels:
+        app: keyforge-api
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/elliot736/keyforge-api:latest
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - secretRef:
+                name: keyforge-secrets
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: API_PORT
+              value: "4000"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keyforge-api
+  namespace: keyforge
+spec:
+  selector:
+    app: keyforge-api
+  ports:
+    - port: 4000
+      targetPort: 4000
+```
+
+## Dashboard Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keyforge-dashboard
+  namespace: keyforge
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: keyforge-dashboard
+  template:
+    metadata:
+      labels:
+        app: keyforge-dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: ghcr.io/elliot736/keyforge-dashboard:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: API_URL
+              value: http://keyforge-api:4000
+            - name: NEXT_PUBLIC_API_URL
+              value: https://api.yourdomain.com
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keyforge-dashboard
+  namespace: keyforge
+spec:
+  selector:
+    app: keyforge-dashboard
+  ports:
+    - port: 3000
+      targetPort: 3000
+```
+
+## Ingress
+
+Using nginx-ingress:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keyforge-ingress
+  namespace: keyforge
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.yourdomain.com
+        - app.yourdomain.com
+      secretName: keyforge-tls
+  rules:
+    - host: api.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keyforge-api
+                port:
+                  number: 4000
+    - host: app.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keyforge-dashboard
+                port:
+                  number: 3000
+```
+
+## HorizontalPodAutoscaler
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: keyforge-api-hpa
+  namespace: keyforge
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: keyforge-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+```
+
+## Apply all manifests
+
+```bash
+kubectl apply -f k8s/ --namespace keyforge
+```
+
+<Callout type="info" title="In-cluster databases">
+For production, use managed Postgres (RDS, Cloud SQL, Aiven) and managed Redis (ElastiCache, Memorystore, Upstash) rather than running them inside the cluster.
+</Callout>

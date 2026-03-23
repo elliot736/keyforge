@@ -1,0 +1,89 @@
+---
+title: Docker
+description: Deploy KeyForge locally or on any server using Docker Compose.
+---
+
+## Prerequisites
+
+- Docker Engine 20.10+
+- Docker Compose v2
+
+## Quick Start
+
+Clone the repository and configure your environment:
+
+```bash
+git clone https://github.com/elliot736/keyforge.git
+cd keyforge
+cp .env.example .env
+```
+
+Edit `.env` with your configuration:
+
+```bash
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/keyforge
+REDIS_URL=redis://redis:6379
+BETTER_AUTH_SECRET=your-secret-at-least-16-chars
+BETTER_AUTH_URL=http://localhost:4000
+```
+
+Start all services:
+
+```bash
+docker compose up -d
+```
+
+## Services
+
+| Service | Image | Port | Description |
+|---------|-------|------|-------------|
+| `postgres` | `postgres:16` | 5555 | Primary database |
+| `redis` | `redis:7` | 6381 | Cache and rate limiting |
+| `api` | KeyForge API | 4000 | REST API server |
+| `dashboard` | KeyForge Dashboard | 3000 | Web dashboard |
+
+## Database Setup
+
+After the containers are running, apply the database migrations:
+
+```bash
+pnpm --filter @keyforge/api run db:migrate
+```
+
+<Callout type="info" title="Development vs production">
+For local development, you can use `pnpm --filter @keyforge/api run db:push` which syncs the schema directly without migration files. For production, always use `db:migrate` with versioned migrations — it's safer and supports rollbacks.
+</Callout>
+
+To generate a new migration after changing the schema:
+
+```bash
+pnpm --filter @keyforge/api run db:generate
+```
+
+## Health Check
+
+Verify the API is running:
+
+```bash
+curl http://localhost:4000/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+## Stopping
+
+```bash
+docker compose down
+```
+
+To remove all data volumes as well:
+
+```bash
+docker compose down -v
+```

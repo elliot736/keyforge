@@ -1,0 +1,131 @@
+---
+title: Stripe Usage Metering
+description: Auto-sync token usage to Stripe for usage-based billing
+---
+
+KeyForge automatically reports token usage, API requests, and cost to Stripe Billing Meters. Your customers get billed based on actual consumption — no custom billing code needed.
+
+## How It Works
+
+Every 10 minutes, KeyForge syncs usage data from Postgres to Stripe for all paying workspaces:
+
+1. **Token usage** — total input + output tokens consumed
+2. **API requests** — total verification calls
+3. **Cost** — total cost in cents (as reported via `usage.report()`)
+
+KeyForge supports two Stripe billing approaches:
+
+- **Billing Meters** (recommended) — Stripe's modern usage-based billing API. Events are sent to named meters.
+- **Subscription Usage Records** (legacy) — Reports to metered subscription line items.
+
+Both can run simultaneously.
+
+## Setup
+
+<Steps>
+
+<Step>
+### Create Stripe Billing Meters
+
+In your [Stripe Dashboard](https://dashboard.stripe.com/billing/meters), create meters for the metrics you want to bill on:
+
+| Meter Event Name | Aggregation | Description |
+|------------------|-------------|-------------|
+| `keyforge_tokens` | Sum | Total tokens consumed |
+| `keyforge_requests` | Sum | Total API verifications |
+| `keyforge_cost` | Sum | Total cost in cents |
+
+You only need to create meters for metrics you want to bill on. Most AI companies bill on tokens.
+</Step>
+
+<Step>
+### Create a metered price
+
+In Stripe, create a Price that uses your meter:
+
+1. Go to **Products > Add Product**
+2. Choose **Usage-based pricing**
+3. Select your meter (e.g., `keyforge_tokens`)
+4. Set the per-unit price (e.g., $0.00001 per token)
+</Step>
+
+<Step>
+### Configure workspace metadata
+
+Set the meter event names in your workspace metadata. You can do this via the API:
+
+```bash
+curl -X PATCH https://your-api.com/v1/workspaces/ws_xxx \
+  -H "Authorization: Bearer rk_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "__stripeMeterTokens": "keyforge_tokens",
+      "__stripeMeterRequests": "keyforge_requests",
+      "__stripeMeterCost": "keyforge_cost"
+    }
+  }'
+```
+
+Only set the meters you want to report. If you only bill on tokens, only set `__stripeMeterTokens`.
+</Step>
+
+<Step>
+### Ensure Stripe is configured
+
+Set these environment variables:
+
+```bash
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+KeyForge auto-syncs every 10 minutes when Stripe is configured and the workspace has meter event names in metadata.
+</Step>
+
+</Steps>
+
+## Workspace Metadata Keys
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `__stripeMeterTokens` | `string` | Stripe meter event name for token usage |
+| `__stripeMeterRequests` | `string` | Stripe meter event name for API request count |
+| `__stripeMeterCost` | `string` | Stripe meter event name for cost in cents |
+
+## How Usage Flows
+
+```
+Your API → kf.usage.report({ tokens, model, cost })
+                    ↓
+           Redis (real-time counters)
+                    ↓  (every 1 min)
+           Postgres (usage_records table)
+                    ↓  (every 10 min)
+           Stripe Billing Meters
+                    ↓
+           Customer's invoice
+```
+
+<Callout type="info" title="No double-counting">
+The sync reports cumulative daily totals with each event, not incremental deltas. Stripe Billing Meters handle deduplication.
+</Callout>
+
+## SDK Usage Reporting
+
+For accurate billing, report token usage after each LLM call:
+
+```ts
+await kf.usage.report({
+  keyId: 'key_xxx',
+  tokens: { input: 150, output: 380 },
+  model: 'gpt-4o',
+  cost: 0.0053, // dollars
+});
+```
+
+This feeds into both budget enforcement (real-time via Redis) and Stripe billing (batched via Postgres).
+
+## Legacy: Subscription Usage Records
+
+If you're using Stripe's older metered billing (subscription items with `usage_type: 'metered'`), KeyForge also syncs verification counts to those automatically. No additional configuration needed — just ensure the subscription has a metered line item.

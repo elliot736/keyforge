@@ -1,0 +1,18 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quickstart",
+    "how-it-works",
+    "---SDK---",
+    "sdk",
+    "---Frameworks---",
+    "frameworks",
+    "---Features---",
+    "features",
+    "---API Reference---",
+    "api-reference",
+    "---Deployment---",
+    "deployment"
+  ]
+}

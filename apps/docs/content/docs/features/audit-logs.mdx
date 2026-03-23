@@ -1,0 +1,104 @@
+---
+title: Audit Logs
+description: Track every management action with automatic audit logging
+---
+
+KeyForge automatically logs all management actions performed on keys, webhooks, and workspace settings. Audit logs provide a tamper-evident record of who did what, when, and from where.
+
+## Logged Fields
+
+Every audit log entry contains:
+
+| Field | Description |
+| --- | --- |
+| `id` | Unique identifier for the log entry. |
+| `actor` | The user or API key that performed the action. |
+| `action` | The action that was performed (e.g., `key.create`, `key.revoke`). |
+| `resource` | The type and ID of the affected resource. |
+| `timestamp` | ISO 8601 timestamp of the action. |
+| `ip` | IP address of the request origin. |
+| `userAgent` | User agent string of the client. |
+| `meta` | Additional context specific to the action (e.g., changed fields). |
+
+## Tracked Actions
+
+The following actions are automatically logged:
+
+| Action | Description |
+| --- | --- |
+| `key.create` | A new API key was created. |
+| `key.update` | A key's settings were modified. |
+| `key.revoke` | A key was revoked. |
+| `key.rotate` | A key was rotated. |
+| `key.delete` | A key was permanently deleted. |
+| `webhook.create` | A webhook endpoint was registered. |
+| `webhook.update` | A webhook's configuration was changed. |
+| `webhook.delete` | A webhook was removed. |
+| `workspace.update` | Workspace settings were changed. |
+| `member.invite` | A team member was invited. |
+| `member.remove` | A team member was removed. |
+| `member.role_change` | A team member's role was changed. |
+
+## Querying Audit Logs
+
+Use the SDK to query audit logs with filters:
+
+```ts
+const logs = await kf.auditLogs.list({
+  action: 'key.revoke',
+  actorId: 'user_123',
+  from: '2026-01-01T00:00:00Z',
+  to: '2026-03-23T00:00:00Z',
+  limit: 50,
+  cursor: undefined,
+});
+
+for (const entry of logs.data) {
+  console.log(`${entry.timestamp} - ${entry.actor} performed ${entry.action} on ${entry.resource}`);
+}
+```
+
+### Available Filters
+
+| Filter | Type | Description |
+| --- | --- | --- |
+| `action` | `string` | Filter by action type. |
+| `actorId` | `string` | Filter by the user or key that performed the action. |
+| `resourceId` | `string` | Filter by the affected resource. |
+| `from` | `string` | Start of the time range (ISO 8601). |
+| `to` | `string` | End of the time range (ISO 8601). |
+| `limit` | `number` | Number of entries to return (max 100). |
+| `cursor` | `string` | Pagination cursor from a previous response. |
+
+## Retention
+
+Audit log retention depends on your plan:
+
+| Plan | Retention |
+| --- | --- |
+| Free | 30 days |
+| Pro | 365 days |
+| Enterprise | Unlimited (configurable) |
+
+Logs beyond the retention window are automatically purged and cannot be recovered. If you need long-term storage, export logs to your own system using the API or set up a webhook listener for real-time forwarding.
+
+## Exporting Logs
+
+Export audit logs in JSON or CSV format:
+
+```ts
+const csv = await kf.auditLogs.export({
+  format: 'csv',
+  from: '2026-01-01T00:00:00Z',
+  to: '2026-03-23T00:00:00Z',
+});
+```
+
+## REST API
+
+Audit logs are also available via the REST API:
+
+```bash
+curl -H "Authorization: Bearer root_key_..." \
+  "https://api.keyforge.dev/v1/audit-logs?action=key.revoke&limit=10"
+```

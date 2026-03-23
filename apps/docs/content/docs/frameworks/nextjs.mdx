@@ -1,0 +1,123 @@
+---
+title: Next.js
+description: Protect your Next.js API routes with KeyForge middleware
+---
+
+## Installation
+
+```bash
+npm install @keyforge/sdk
+```
+
+## Middleware Setup
+
+Use the `withKeyForge` wrapper in your Next.js middleware file to validate API keys at the edge before requests reach your route handlers.
+
+```ts
+// middleware.ts
+import { KeyForge } from '@keyforge/sdk';
+import { withKeyForge } from '@keyforge/sdk/middleware/nextjs';
+
+const kf = new KeyForge({ apiUrl: '...', rootKey: '...' });
+
+export const middleware = withKeyForge({
+  keyforge: kf,
+  matcher: ['/api/:path*'],
+});
+
+export const config = {
+  matcher: ['/api/:path*'],
+};
+```
+
+The middleware intercepts matched routes, validates the `Authorization: Bearer <key>` header, and forwards the verified key context to your route handlers via request headers.
+
+## Reading Key Context in Route Handlers
+
+After validation, KeyForge injects context into custom request headers that your API routes can read:
+
+```ts
+// app/api/completions/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+
+export async function GET(request: NextRequest) {
+  const keyId = request.headers.get('x-keyforge-key-id');
+  const ownerId = request.headers.get('x-keyforge-owner-id');
+  const scopes = request.headers.get('x-keyforge-scopes')?.split(',') ?? [];
+
+  return NextResponse.json({
+    message: `Authenticated as ${ownerId}`,
+    keyId,
+    scopes,
+  });
+}
+```
+
+### Available Headers
+
+| Header | Description |
+| --- | --- |
+| `x-keyforge-key-id` | The unique identifier of the validated key. |
+| `x-keyforge-owner-id` | The owner associated with the key. |
+| `x-keyforge-scopes` | Comma-separated list of scopes granted to the key. |
+| `x-keyforge-meta` | JSON-encoded metadata attached to the key. |
+| `x-keyforge-ratelimit-limit` | Max requests in the current window. |
+| `x-keyforge-ratelimit-remaining` | Remaining requests in the current window. |
+| `x-keyforge-ratelimit-reset` | Unix timestamp when the window resets. |
+
+## Options
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `keyforge` | `KeyForge` | **Required.** A configured KeyForge SDK instance. |
+| `matcher` | `string[]` | Route patterns to protect. Uses Next.js path matching syntax. |
+| `extractKey` | `(req: NextRequest) => string \| undefined` | Custom key extraction. Defaults to `Authorization: Bearer <key>`. |
+| `onError` | `(req: NextRequest, error: Error) => NextResponse` | Custom error response. Defaults to a `401` JSON response. |
+
+### Custom Key Extraction
+
+```ts
+export const middleware = withKeyForge({
+  keyforge: kf,
+  matcher: ['/api/:path*'],
+  extractKey: (req) => req.nextUrl.searchParams.get('api_key') ?? undefined,
+});
+```
+
+### Custom Error Response
+
+```ts
+export const middleware = withKeyForge({
+  keyforge: kf,
+  matcher: ['/api/:path*'],
+  onError: (req, error) => {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    );
+  },
+});
+```
+
+## Pages Router
+
+If you are using the Pages Router, you can validate keys inside an API route directly instead of using edge middleware:
+
+```ts
+// pages/api/completions.ts
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { KeyForge } from '@keyforge/sdk';
+
+const kf = new KeyForge({ apiUrl: '...', rootKey: '...' });
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Missing API key' });
+
+  const result = await kf.keys.verify({ key: token });
+  if (!result.valid) return res.status(401).json({ error: 'Invalid API key' });
+
+  const { keyId, ownerId } = result;
+  res.json({ message: `Hello, ${ownerId}` });
+}
+```

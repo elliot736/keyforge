@@ -1,0 +1,130 @@
+---
+title: Fly.io
+description: Deploy KeyForge on Fly.io with edge-close compute
+---
+
+Deploy KeyForge on [Fly.io](https://fly.io) for low-latency deployments close to your users.
+
+## Prerequisites
+
+- [flyctl](https://fly.io/docs/flyctl/install/) installed
+- Fly.io account with a credit card on file
+
+<Steps>
+
+<Step>
+### Create the app
+
+```bash
+cd apps/api
+fly launch --no-deploy
+```
+
+Choose a region close to your users. Fly will generate a `fly.toml` config file.
+</Step>
+
+<Step>
+### Provision Postgres
+
+```bash
+fly postgres create --name keyforge-db --region iad --vm-size shared-cpu-1x
+fly postgres attach keyforge-db
+```
+
+This sets the `DATABASE_URL` secret automatically.
+</Step>
+
+<Step>
+### Provision Redis
+
+```bash
+fly redis create --name keyforge-redis --region iad --plan free
+```
+
+Copy the Redis connection URL from the output.
+</Step>
+
+<Step>
+### Set secrets
+
+```bash
+fly secrets set \
+  REDIS_URL="redis://default:password@keyforge-redis.upstash.io:6379" \
+  BETTER_AUTH_SECRET="generate-a-random-32-char-string" \
+  BETTER_AUTH_URL="https://keyforge-api.fly.dev" \
+  NODE_ENV="production" \
+  API_PORT="8080"
+```
+</Step>
+
+<Step>
+### Configure fly.toml
+
+Update the generated `fly.toml`:
+
+```toml
+[build]
+  dockerfile = "../../docker/Dockerfile.api"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+[checks]
+  [checks.health]
+    type = "http"
+    port = 8080
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+```
+</Step>
+
+<Step>
+### Deploy
+
+```bash
+fly deploy
+```
+</Step>
+
+<Step>
+### Initialize the database
+
+```bash
+fly ssh console -C "npx drizzle-kit migrate"
+```
+</Step>
+
+</Steps>
+
+## Deploy the Dashboard
+
+Repeat the process for the dashboard:
+
+```bash
+cd apps/dashboard
+fly launch --no-deploy
+fly secrets set API_URL="https://keyforge-api.fly.dev"
+fly deploy
+```
+
+## Scaling
+
+Scale horizontally by adding machines in multiple regions:
+
+```bash
+fly scale count 2 --region iad,cdg
+```
+
+## Estimated cost
+
+| Service | Monthly Cost |
+|---------|-------------|
+| API (shared-cpu-1x, 256MB) | ~$3 |
+| Dashboard (shared-cpu-1x, 256MB) | ~$3 |
+| Postgres (1GB, single node) | ~$7 |
+| Redis (Upstash free tier) | $0 |
+| **Total** | **~$13/mo** |

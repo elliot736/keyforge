@@ -1,0 +1,101 @@
+---
+title: Manage Keys
+description: Create, list, update, revoke, and rotate API keys
+---
+
+# Manage Keys
+
+All key management operations require a root key. See [Installation](/docs/sdk/installation) for setup.
+
+## Create a Key
+
+```ts
+const { key, keyId } = await kf.keys.create({
+  name: 'Production Key',
+  prefix: 'kf_live',
+  environment: 'production',
+  scopes: ['api.read', 'completions.create'],
+  meta: { team: 'backend', tier: 'pro' },
+  expiresAt: '2026-12-31T23:59:59Z',
+  rateLimitConfig: {
+    algorithm: 'sliding_window', // 'fixed_window' | 'sliding_window' | 'token_bucket'
+    limit: 100,
+    window: 60000, // milliseconds
+  },
+  tokenBudget: 1000000,
+  spendCapCents: 5000,
+  modelPolicies: {
+    'gpt-4o': { tokenBudget: 500000, spendCapCents: 3000 },
+    'gpt-4o-mini': { tokenBudget: 2000000 },
+  },
+});
+
+console.log(key);   // kf_live_xxxxxxxx — only returned at creation time
+console.log(keyId); // key_xxxxxxxx
+```
+
+The `key` value is the plaintext API key. It is only returned once during creation. Store or display it immediately.
+
+## List Keys
+
+```ts
+const keys = await kf.keys.list({
+  limit: 20,
+  offset: 0,
+  environment: 'production',
+});
+
+for (const k of keys.data) {
+  console.log(k.keyId, k.name, k.status);
+}
+```
+
+## Get a Key
+
+```ts
+const keyDetails = await kf.keys.get({ keyId: 'key_xxxxxxxx' });
+
+console.log(keyDetails.name);
+console.log(keyDetails.scopes);
+console.log(keyDetails.rateLimitConfig);
+```
+
+## Update a Key
+
+```ts
+await kf.keys.update({
+  keyId: 'key_xxxxxxxx',
+  name: 'Renamed Key',
+  scopes: ['api.read', 'completions.create', 'embeddings.create'],
+  rateLimitConfig: {
+    algorithm: 'token_bucket',
+    limit: 200,
+    window: 60000,
+  },
+  tokenBudget: 2000000,
+  meta: { team: 'backend', tier: 'enterprise' },
+});
+```
+
+Updates take effect immediately. The Redis cache is invalidated so the next verification reflects the new configuration.
+
+## Revoke a Key
+
+```ts
+await kf.keys.revoke({ keyId: 'key_xxxxxxxx' });
+```
+
+Revoked keys return `KEY_REVOKED` on verification. Revocation is permanent.
+
+## Rotate a Key
+
+```ts
+const { key: newKey } = await kf.keys.rotate({
+  keyId: 'key_xxxxxxxx',
+  gracePeriod: 86400000, // 24 hours in milliseconds
+});
+
+console.log(newKey); // kf_live_yyyyyyyy — new key value
+```
+
+During the grace period, both the old and new keys are valid. After the grace period expires, the old key is automatically revoked. This lets your customers migrate without downtime.

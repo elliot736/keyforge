@@ -1,0 +1,128 @@
+---
+title: Model Policies
+description: Set per-model rate limits, token budgets, and spend caps on API keys
+---
+
+Model policies let you control how each AI model is used on a per-key basis. Instead of a single blanket limit, you can set different token budgets, spend caps, and rate limits for each model -- or block specific models entirely.
+
+## Why Model Policies
+
+When your platform supports multiple AI models, a single global rate limit is not enough. A key that accesses `gpt-4o` at the same rate as `gpt-4o-mini` will incur vastly different costs. Model policies solve this by letting you define fine-grained controls per model on the same key.
+
+## Creating a Key with Model Policies
+
+```ts
+const { key } = await kf.keys.create({
+  name: 'Customer API Key',
+  modelPolicies: {
+    'gpt-4o': {
+      tokenBudget: 500000,      // 500K tokens/month
+      spendCapCents: 5000,       // $50/month cap
+      rateLimitMax: 60,          // 60 req/min
+      rateLimitWindow: 60,       // per minute
+    },
+    'gpt-4o-mini': {
+      tokenBudget: 5000000,      // 5M tokens/month (cheaper model, higher limit)
+    },
+    'claude-opus-4-20250514': {
+      blocked: true,              // not allowed on this key
+    },
+  },
+});
+```
+
+## Verifying with Model Context
+
+When verifying a key, pass the `model` parameter to enforce model-specific limits:
+
+```ts
+const result = await kf.keys.verify({
+  key: 'kf_live_...',
+  model: 'gpt-4o',  // enforces gpt-4o specific limits
+});
+
+if (!result.valid) {
+  // Key is invalid, expired, or the model policy blocked the request
+  console.log(result.code); // e.g., 'MODEL_BLOCKED', 'TOKEN_BUDGET_EXCEEDED'
+}
+```
+
+If no `model` is provided, only global limits are enforced.
+
+## Policy Fields
+
+Each model policy supports the following fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `tokenBudget` | `number` | Maximum tokens allowed per billing period. |
+| `spendCapCents` | `number` | Maximum spend in cents per billing period. |
+| `rateLimitMax` | `number` | Maximum requests allowed in the rate limit window. |
+| `rateLimitWindow` | `number` | Rate limit window duration in seconds. |
+| `blocked` | `boolean` | If `true`, all requests to this model are rejected. |
+
+## Blocking Models
+
+Set `blocked: true` to prevent a key from accessing a specific model. This is useful for restricting access to expensive or preview models:
+
+```ts
+modelPolicies: {
+  'o1-preview': { blocked: true },
+  'claude-opus-4-20250514': { blocked: true },
+}
+```
+
+When a blocked model is requested, the verify response returns `{ valid: false, code: 'MODEL_BLOCKED' }`.
+
+## Token Budgets per Model
+
+Token budgets limit the total number of tokens a key can consume for a specific model within a billing period (monthly by default). This is independent of the global token budget on the key.
+
+```ts
+modelPolicies: {
+  'gpt-4o': { tokenBudget: 500000 },
+  'gpt-4o-mini': { tokenBudget: 5000000 },
+}
+```
+
+When the budget is exceeded, verify returns `{ valid: false, code: 'TOKEN_BUDGET_EXCEEDED' }`.
+
+## Spend Caps per Model
+
+Spend caps limit the total cost of API calls for a specific model, expressed in cents. KeyForge tracks spend based on the token usage you report.
+
+```ts
+modelPolicies: {
+  'gpt-4o': { spendCapCents: 5000 },  // $50/month
+}
+```
+
+## Rate Limits per Model
+
+Model-specific rate limits are independent of the key's global rate limit. A key might allow 200 requests per minute globally, but only 30 per minute for an expensive model:
+
+```ts
+rateLimitConfig: { algorithm: 'sliding_window', limit: 200, window: 60000 },
+modelPolicies: {
+  'gpt-4o': { rateLimitMax: 30, rateLimitWindow: 60 },
+}
+```
+
+## Updating Model Policies
+
+Update policies on an existing key without affecting other settings:
+
+```ts
+await kf.keys.update('key_abc', {
+  modelPolicies: {
+    'gpt-4o': { tokenBudget: 1000000 },  // increase budget
+    'o1-preview': { blocked: false },      // unblock
+  },
+});
+```
+
+## Interaction with Global Limits
+
+Model policies are enforced **in addition to** global limits, not instead of them. A request must pass both the global rate limit and the model-specific rate limit. Similarly, a key must be within both its global token budget and the model-specific token budget.
+
+This means model policies can only be more restrictive than the global settings, never more permissive.

@@ -1,0 +1,124 @@
+---
+title: Token Budgets & Spend Caps
+description: Control token usage and costs with per-key budgets and spend caps
+---
+
+Token budgets and spend caps let you set hard limits on how much each API key can consume within a billing period. Combined with [model policies](/docs/features/model-policies), you get fine-grained control over both global and per-model costs.
+
+## Global Token Budget
+
+Set a monthly token budget when creating a key. Once the budget is exhausted, the key is rejected until the next billing period.
+
+```ts
+const { key } = await kf.keys.create({
+  name: 'Customer Key',
+  ownerId: 'user_123',
+  tokenBudget: 1000000, // 1M tokens/month
+});
+```
+
+## Global Spend Cap
+
+Spend caps limit total cost in cents per billing period, regardless of which models are used:
+
+```ts
+const { key } = await kf.keys.create({
+  name: 'Budget Key',
+  ownerId: 'user_123',
+  spendCapCents: 10000, // $100/month
+});
+```
+
+KeyForge calculates spend from the token usage you report via the usage reporting API. You provide the token counts and cost per call, and KeyForge accumulates the total.
+
+## Reporting Usage
+
+After each API call, report token usage so KeyForge can track budgets and spend:
+
+```ts
+await kf.usage.report({
+  keyId: 'key_abc',
+  model: 'gpt-4o',
+  inputTokens: 1500,
+  outputTokens: 500,
+  costCents: 12, // cost of this call in cents
+});
+```
+
+This feeds into both global and model-specific budgets.
+
+## Interaction with Model Policies
+
+Model policies can set per-model token budgets and spend caps that are enforced **in addition to** global limits. Both must pass for a request to succeed.
+
+```ts
+const { key } = await kf.keys.create({
+  name: 'Tiered Key',
+  ownerId: 'user_123',
+  tokenBudget: 5000000,       // 5M tokens/month globally
+  spendCapCents: 20000,        // $200/month globally
+  modelPolicies: {
+    'gpt-4o': {
+      tokenBudget: 500000,     // 500K tokens/month for gpt-4o
+      spendCapCents: 5000,     // $50/month for gpt-4o
+    },
+    'gpt-4o-mini': {
+      tokenBudget: 4000000,    // 4M tokens/month for gpt-4o-mini
+    },
+  },
+});
+```
+
+In this example, `gpt-4o` usage is capped at both 500K tokens and $50. Once either limit is reached, requests to `gpt-4o` are rejected even if the global budget has headroom.
+
+## Threshold Alerts
+
+KeyForge sends webhook events when a key approaches or exceeds its budget:
+
+| Threshold | Event | Description |
+| --- | --- | --- |
+| 80% | `quota.warning` | Early warning that the key is approaching its limit. |
+| 90% | `quota.warning` | Urgent warning. Time to notify the end user or increase the budget. |
+| 100% | `quota.exceeded` | Budget exhausted. The key is now rejected for the remainder of the period. |
+
+These events fire for both token budgets and spend caps, and for both global and per-model limits. See the [Webhooks](/docs/features/webhooks) guide for setup instructions.
+
+## Checking Remaining Budget
+
+Query the current usage and remaining budget for a key:
+
+```ts
+const usage = await kf.usage.get({
+  keyId: 'key_abc',
+  period: 'current', // current billing period
+});
+
+console.log(usage.tokensUsed);       // 350000
+console.log(usage.tokenBudget);      // 1000000
+console.log(usage.tokensRemaining);  // 650000
+console.log(usage.spendCents);       // 4200
+console.log(usage.spendCapCents);    // 10000
+```
+
+## Billing Period
+
+Token budgets and spend caps reset at the start of each billing period. By default, the billing period is monthly, starting on the day the key was created. You can configure a custom reset schedule at the workspace level.
+
+## Verification Response
+
+When a key is over budget, `keys.verify()` returns a specific error code:
+
+```ts
+const result = await kf.keys.verify({ key: 'kf_live_...', model: 'gpt-4o' });
+
+if (!result.valid) {
+  switch (result.code) {
+    case 'TOKEN_BUDGET_EXCEEDED':
+      // Global or model token budget exhausted
+      break;
+    case 'SPEND_CAP_EXCEEDED':
+      // Global or model spend cap reached
+      break;
+  }
+}
+```

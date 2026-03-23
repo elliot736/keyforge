@@ -1,0 +1,87 @@
+---
+title: Verify Key
+description: Verify an API key and check its permissions, rate limits, and usage.
+---
+
+## POST /v1/keys.verifyKey
+
+Verify an API key's validity and retrieve its associated metadata. This is the hot path endpoint, optimized for **sub-5ms latency** using Redis caching and minimal database lookups.
+
+**Authentication:** None required. The key itself is the credential.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | `string` | Yes | The API key to verify |
+| `model` | `string` | No | Model identifier for per-model policy checks |
+
+### Response
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `valid` | `boolean` | Whether the key is valid |
+| `code` | `string` | Error code if the key is invalid |
+| `keyId` | `string` | Unique key identifier |
+| `ownerId` | `string` | Owner of the key |
+| `workspaceId` | `string` | Workspace the key belongs to |
+| `name` | `string` | Human-readable key name |
+| `environment` | `string` | Key environment (`live` or `test`) |
+| `scopes` | `string[]` | Granted permission scopes |
+| `meta` | `object` | Arbitrary metadata attached to the key |
+| `rateLimit` | `object` | Current rate limit status |
+| `usage` | `object` | Current usage statistics |
+
+### Example
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/keys.verifyKey \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "kf_live_abc123def456",
+    "model": "gpt-4o"
+  }'
+```
+
+**Success response:**
+
+```json
+{
+  "valid": true,
+  "keyId": "key_01JQ3X...",
+  "ownerId": "user_01JQ3X...",
+  "workspaceId": "ws_01JQ3X...",
+  "name": "Production Key",
+  "environment": "live",
+  "scopes": ["chat.completions", "embeddings"],
+  "meta": {
+    "team": "backend"
+  },
+  "rateLimit": {
+    "limit": 1000,
+    "remaining": 994,
+    "reset": 1711234567
+  },
+  "usage": {
+    "tokensUsed": 48230,
+    "tokenBudget": 1000000,
+    "spentCents": 142,
+    "spendCapCents": 5000
+  }
+}
+```
+
+**Invalid key response:**
+
+```json
+{
+  "valid": false,
+  "code": "KEY_REVOKED"
+}
+```
+
+### Performance
+
+This endpoint is designed to sit in the critical path of every API request your users make. KeyForge keeps hot key data in Redis and resolves verification without hitting PostgreSQL on cache hits. Expect p99 latencies under 5ms in typical deployments.
+
+When the `model` parameter is provided, KeyForge also evaluates per-model policies including model-level rate limits, token budgets, spend caps, and block lists — all within the same round-trip.

@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd ../.. && pnpm install && pnpm --filter @keyforge/shared run build && pnpm --filter @keyforge/docs run build",
+  "installCommand": "pnpm install",
+  "framework": "nextjs"
+}

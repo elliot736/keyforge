@@ -1,0 +1,168 @@
+---
+title: Keys
+description: Create, list, update, revoke, and rotate API keys.
+---
+
+All key management endpoints require a **Bearer token** (root key) in the `Authorization` header.
+
+```bash
+Authorization: Bearer kf_root_...
+```
+
+---
+
+## POST /v1/keys.createKey
+
+Create a new API key.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Human-readable key name |
+| `prefix` | `string` | No | Custom key prefix (default: `kf`) |
+| `environment` | `string` | No | `live` or `test` (default: `live`) |
+| `scopes` | `string[]` | No | Permission scopes to grant |
+| `rateLimitConfig` | `object` | No | Rate limit settings (`limit`, `window`) |
+| `tokenBudget` | `number` | No | Monthly token budget |
+| `spendCapCents` | `number` | No | Monthly spend cap in cents |
+| `modelPolicies` | `object[]` | No | Per-model policy overrides |
+| `expiresAt` | `string` | No | ISO 8601 expiration timestamp |
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/keys.createKey \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Backend Service",
+    "prefix": "kf",
+    "environment": "live",
+    "scopes": ["chat.completions"],
+    "rateLimitConfig": {
+      "limit": 1000,
+      "window": 60
+    },
+    "tokenBudget": 500000,
+    "spendCapCents": 2000,
+    "expiresAt": "2026-12-31T23:59:59Z"
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "keyId": "key_01JQ3X...",
+  "key": "kf_live_abc123def456..."
+}
+```
+
+The plaintext `key` is only returned once at creation time. Store it securely.
+
+---
+
+## POST /v1/keys.revokeKey
+
+Revoke an existing key. Optionally specify a grace period before the key becomes invalid.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyId` | `string` | Yes | Key identifier to revoke |
+| `gracePeriodMs` | `number` | No | Milliseconds before revocation takes effect |
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/keys.revokeKey \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keyId": "key_01JQ3X...",
+    "gracePeriodMs": 3600000
+  }'
+```
+
+---
+
+## POST /v1/keys.rotateKey
+
+Rotate a key, generating a new secret while optionally keeping the old key valid for a grace period. Returns the new plaintext key.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `keyId` | `string` | Yes | Key identifier to rotate |
+| `gracePeriodMs` | `number` | No | Milliseconds the old key remains valid |
+
+```bash
+curl -X POST https://api.keyforge.dev/v1/keys.rotateKey \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "keyId": "key_01JQ3X...",
+    "gracePeriodMs": 86400000
+  }'
+```
+
+**Response:**
+
+```json
+{
+  "keyId": "key_01JQ3X...",
+  "key": "kf_live_newkey789..."
+}
+```
+
+---
+
+## GET /v1/keys
+
+List keys with optional filters.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ownerId` | `string` | No | Filter by owner |
+| `environment` | `string` | No | Filter by `live` or `test` |
+| `limit` | `number` | No | Results per page (default: 50) |
+| `offset` | `number` | No | Pagination offset |
+
+```bash
+curl "https://api.keyforge.dev/v1/keys?ownerId=user_01JQ3X...&environment=live&limit=10" \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+---
+
+## GET /v1/keys/:keyId
+
+Retrieve a single key by its identifier.
+
+```bash
+curl https://api.keyforge.dev/v1/keys/key_01JQ3X... \
+  -H "Authorization: Bearer kf_root_..."
+```
+
+---
+
+## PATCH /v1/keys/:keyId
+
+Update a key's mutable properties.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Updated key name |
+| `scopes` | `string[]` | Updated permission scopes |
+| `meta` | `object` | Updated metadata |
+| `rateLimitConfig` | `object` | Updated rate limit settings |
+| `tokenBudget` | `number` | Updated monthly token budget |
+| `spendCapCents` | `number` | Updated monthly spend cap in cents |
+| `modelPolicies` | `object[]` | Updated per-model policies |
+| `expiresAt` | `string` | Updated expiration timestamp |
+
+```bash
+curl -X PATCH https://api.keyforge.dev/v1/keys/key_01JQ3X... \
+  -H "Authorization: Bearer kf_root_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Renamed Key",
+    "tokenBudget": 1000000,
+    "scopes": ["chat.completions", "embeddings"]
+  }'
+```

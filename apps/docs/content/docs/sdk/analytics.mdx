@@ -1,0 +1,117 @@
+---
+title: Analytics
+description: Query model breakdowns, token trends, and cost projections
+---
+
+# Analytics
+
+The analytics SDK methods give you programmatic access to the same data that powers the KeyForge dashboard. Use them to build custom dashboards, generate reports, or feed data into your own billing systems.
+
+## Model Breakdown
+
+Get per-model usage and cost data for a given time range:
+
+```ts
+const models = await kf.analytics.models({
+  from: '2026-03-01T00:00:00Z',
+  to: '2026-03-31T23:59:59Z',
+});
+```
+
+Returns an array of model summaries:
+
+```ts
+[
+  {
+    model: 'gpt-4o',
+    tokensInput: 12500000,
+    tokensOutput: 8900000,
+    costCents: 45200,
+    requestCount: 8500,
+    costPer1kTokens: 2.11,
+  },
+  {
+    model: 'gpt-4o-mini',
+    tokensInput: 45000000,
+    tokensOutput: 32000000,
+    costCents: 12800,
+    requestCount: 22000,
+    costPer1kTokens: 0.17,
+  },
+]
+```
+
+## Token Trends
+
+Track token usage over time with configurable granularity:
+
+```ts
+const trends = await kf.analytics.tokenTrends({
+  from: '2026-03-01T00:00:00Z',
+  to: '2026-03-31T23:59:59Z',
+  granularity: 'day', // 'hour' | 'day' | 'week' | 'month'
+});
+```
+
+Returns an array of time-bucketed data points:
+
+```ts
+[
+  {
+    timestamp: '2026-03-01T00:00:00Z',
+    tokensInput: 1450000,
+    tokensOutput: 980000,
+    costCents: 3200,
+    requestCount: 2100,
+  },
+  {
+    timestamp: '2026-03-02T00:00:00Z',
+    tokensInput: 1620000,
+    tokensOutput: 1100000,
+    costCents: 3800,
+    requestCount: 2400,
+  },
+  // ...
+]
+```
+
+## Cost Projection
+
+Get a projection of your current month's spend based on usage so far:
+
+```ts
+const projection = await kf.analytics.projection();
+```
+
+Returns:
+
+```ts
+{
+  currentMonthCostCents: 38500,
+  projectedMonthCostCents: 55200,
+  dailyAverageCostCents: 1750,
+  daysElapsed: 22,
+  daysRemaining: 9,
+}
+```
+
+The projection uses a simple linear extrapolation based on the daily average cost for the current month. It updates with each usage report.
+
+## Filtering by Key or Owner
+
+All analytics methods accept optional `keyId` and `ownerId` parameters to scope the query:
+
+```ts
+const ownerModels = await kf.analytics.models({
+  from: '2026-03-01T00:00:00Z',
+  to: '2026-03-31T23:59:59Z',
+  ownerId: 'owner_xxxxxxxx',
+});
+
+const keyTrends = await kf.analytics.tokenTrends({
+  from: '2026-03-01T00:00:00Z',
+  to: '2026-03-31T23:59:59Z',
+  keyId: 'key_xxxxxxxx',
+  granularity: 'hour',
+});
+```
